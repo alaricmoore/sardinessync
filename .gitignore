@@ -1,0 +1,90 @@
+# ───────────────────────────────────────────────────────────
+# macOS
+# ───────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# ───────────────────────────────────────────────────────────
+# Xcode — user-specific state and build artifacts
+# ───────────────────────────────────────────────────────────
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.perspectivev3
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+
+# Build output
+build/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode workspace local settings (keep shared, ignore user)
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# ───────────────────────────────────────────────────────────
+# Swift Package Manager
+# ───────────────────────────────────────────────────────────
+.build/
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# ───────────────────────────────────────────────────────────
+# CocoaPods (if ever used)
+# ───────────────────────────────────────────────────────────
+Pods/
+*.xcworkspace
+!*.xcodeproj/project.xcworkspace
+
+# ───────────────────────────────────────────────────────────
+# Carthage (if ever used)
+# ───────────────────────────────────────────────────────────
+Carthage/Build/
+Carthage/Checkouts/
+
+# ───────────────────────────────────────────────────────────
+# fastlane (not used yet but if you ever)
+# ───────────────────────────────────────────────────────────
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# ───────────────────────────────────────────────────────────
+# Editor and IDE artifacts
+# ───────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ───────────────────────────────────────────────────────────
+# Secrets — anything that could leak an API token or URL
+# The app stores config in UserDefaults on-device (not in source),
+# but belt-and-suspenders for any local files that might appear:
+# ───────────────────────────────────────────────────────────
+Secrets.plist
+secrets.json
+local.xcconfig
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
