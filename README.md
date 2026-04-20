@@ -1,27 +1,8 @@
-# Biotracker iOS App — Quick Start Guide
 
-**Status: 95% Complete** ✅  
-**Remaining: Flask endpoint + Xcode configuration verification**
 
----
 
-## What's Already Done
 
-Your Swift implementation is **almost complete**! All major components are in place:
-
-✅ TabView with 3 tabs (Sync, Log, Risk)  
-✅ WKWebView integration for biotracker mobile pages  
-✅ HealthKit sync (manual + automatic)  
-✅ Background task scheduling (BGTaskScheduler)  
-✅ Local notifications (4 types: bedtime, med doses, flare alerts)  
-✅ Flare status API client  
-✅ iOS Shortcuts integration  
-✅ Historical data backfill  
-✅ Settings UI with all configuration options  
-
----
-
-## What You Need To Do
+Forgive this... its a work in progress, but it does mostly work. mostly. 
 
 ### 1. Add Flask API Endpoint (5-10 minutes)
 
