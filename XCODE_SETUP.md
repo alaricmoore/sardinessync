@@ -1,12 +1,10 @@
 # Xcode Project Configuration Checklist
 
-## Required Project Settings
+## Required project settings
 
-### 1. Info.plist Keys
+### 1. Info.plist keys
 
-**Location:** In Xcode, select the healthsync target → Info tab
-
-Add these keys (or verify they exist):
+In Xcode, select the healthsync target → Info tab.
 
 | Key | Type | Value |
 |-----|------|-------|
@@ -17,101 +15,96 @@ Add these keys (or verify they exist):
 For `BGTaskSchedulerPermittedIdentifiers`, add one item (String):
 - `com.biotracking.healthsync.daily`
 
-**How to add in Xcode:**
-1. Select your project in the navigator
-2. Select the "healthsync" target
-3. Go to "Info" tab
-4. Hover over an existing key, click the "+" button
+How to add a key:
+1. Select the project in the navigator
+2. Select the healthsync target
+3. Open the Info tab
+4. Hover an existing key, click "+"
 5. Type the key name exactly (autocomplete may help)
-6. Select the correct type from dropdown
+6. Pick the correct type from the dropdown
 7. Enter the value
 
 ### 2. Signing & Capabilities
 
-**Location:** Select healthsync target → Signing & Capabilities tab
-
-#### Required Capabilities:
+healthsync target → Signing & Capabilities tab.
 
 **HealthKit**
 - [ ] Enabled
-- Clinical Health Records: OFF (not needed)
-- Background Delivery: ON (critical for background sync)
+- Clinical Health Records: off (not needed)
+- Background Delivery: on (required for background sync)
 
 **Background Modes**
 - [ ] Enabled
-- [ ] "Background fetch" — UNCHECKED (deprecated, don't use)
-- [ ] "Background processing" — CHECKED ✅ (required for BGTaskScheduler)
-- [ ] "Remote notifications" — UNCHECKED (not using APNs)
+- [ ] "Background fetch" — unchecked (deprecated)
+- [ ] "Background processing" — checked (required for BGTaskScheduler)
+- [ ] "Remote notifications" — unchecked (no APNs)
 
-**App Groups** (optional, only if sharing data with widget/extension later)
-- Not required for current implementation
+**App Groups** — not required for the current implementation.
 
-#### How to add capabilities:
-1. Select healthsync target → Signing & Capabilities tab
-2. Click "+ Capability" button
+How to add a capability:
+1. healthsync target → Signing & Capabilities tab
+2. "+ Capability"
 3. Search for "HealthKit", double-click to add
 4. Repeat for "Background Modes"
 5. Check the appropriate boxes under Background Modes
 
-### 3. Entitlements File
+### 3. Entitlements file
 
-**File:** `healthsync.entitlements`
-
-Should contain at minimum:
+`healthsync.entitlements` should contain at minimum:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.developer.healthkit</key>
-	<true/>
-	<key>com.apple.developer.healthkit.access</key>
-	<array>
-		<string>health-records</string>
-	</array>
-	<key>com.apple.developer.healthkit.background-delivery</key>
-	<true/>
+    <key>com.apple.developer.healthkit</key>
+    <true/>
+    <key>com.apple.developer.healthkit.access</key>
+    <array>
+        <string>health-records</string>
+    </array>
+    <key>com.apple.developer.healthkit.background-delivery</key>
+    <true/>
 </dict>
 </plist>
 ```
 
-**This file should already exist** if you added HealthKit capability. Xcode auto-generates it.
+This file is auto-generated when the HealthKit capability is added.
 
 ### 4. Deployment Info
 
-**Location:** Select healthsync target → General tab → Deployment Info
+healthsync target → General tab → Deployment Info.
 
 | Setting | Value |
 |---------|-------|
 | Minimum Deployments | iOS 17.0 or later (for Swift Charts 3D, HealthKit features) |
-| iPhone Orientation | Portrait (primary), disable landscape unless needed |
-| iPad Support | Optional (app works on iPad but optimized for iPhone) |
+| iPhone Orientation | Portrait (primary); disable landscape unless needed |
+| iPad Support | Optional — works on iPad but optimized for iPhone |
 
-### 5. Build Settings (Important)
+### 5. Build settings
 
-**Location:** Select healthsync target → Build Settings tab
+healthsync target → Build Settings tab.
 
 | Setting | Value | Notes |
 |---------|-------|-------|
-| Swift Language Version | Swift 5 | Should be default |
+| Swift Language Version | Swift 5 | Default |
 | Enable Bitcode | No | Bitcode deprecated in Xcode 14+ |
 | Debug Information Format | DWARF with dSYM File | For crash reports |
 
 ### 6. App Privacy Report (iOS 15+)
 
-Your app accesses:
-- ✅ Health data (requires NSHealthShareUsageDescription)
-- ✅ Network connectivity (no special permission needed)
-- ✅ Notifications (requested at runtime)
+The app accesses:
+- Health data (requires `NSHealthShareUsageDescription`)
+- Network connectivity (no special permission needed)
+- Notifications (requested at runtime)
 
-Users can see what your app accesses in Settings → Privacy & Security → healthsync
+Users can review what the app accesses at Settings → Privacy & Security → healthsync.
 
 ---
 
-## Project Structure
+## Project structure
 
-Your final Xcode project should have these files:
+The Xcode project contains:
 
 ```
 healthsync/
@@ -130,74 +123,69 @@ healthsync/
 └── Info.plist                          ← Auto-managed by Xcode (or manual)
 ```
 
-**Note:** In modern Xcode projects, Info.plist is often managed through the UI (Build Settings → Info), not as a separate file. If you don't see `Info.plist` in your navigator, that's normal — just use the Info tab in your target settings.
+In modern Xcode projects, Info.plist is often managed through the UI (Build Settings → Info) instead of as a separate file. If `Info.plist` doesn't appear in the navigator, that's expected — use the Info tab in target settings.
 
 ---
 
-## Common Configuration Issues
+## Common configuration issues
 
-### Issue: "Background task not permitted"
-**Fix:** Check Info.plist has `BGTaskSchedulerPermittedIdentifiers` with correct identifier
+### "Background task not permitted"
+Info.plist must have `BGTaskSchedulerPermittedIdentifiers` containing the correct identifier.
 
-### Issue: "HealthKit not authorized"
-**Fix:** Check:
-1. Capability → HealthKit is enabled
-2. Info.plist has `NSHealthShareUsageDescription`
-3. Running on real device (HealthKit doesn't work in Simulator for most data)
+### "HealthKit not authorized"
+- HealthKit capability is enabled
+- Info.plist has `NSHealthShareUsageDescription`
+- Running on a real device (HealthKit doesn't work in the Simulator for most data types)
 
-### Issue: "Notifications don't appear"
-**Fix:** Check:
-1. NotificationManager.shared.requestAuthorization() is called
-2. User granted permission (check Settings → Notifications → healthsync)
-3. App is not in Do Not Disturb mode
-4. UNUserNotificationCenter delegate is set (done in NotificationManager.setup())
+### Notifications don't appear
+- `NotificationManager.shared.requestAuthorization()` is called
+- User granted permission (Settings → Notifications → healthsync)
+- App is not in Do Not Disturb / Focus
+- `UNUserNotificationCenter` delegate is set (handled in `NotificationManager.setup()`)
 
-### Issue: "Background sync never runs"
-**Fix:** Remember:
-- iOS controls background task execution, not guaranteed timing
-- Device must have Background App Refresh enabled (Settings → General)
+### Background sync never runs
+- iOS controls background task execution; timing isn't guaranteed
+- Background App Refresh must be enabled (Settings → General)
 - Device must not be in Low Power Mode
-- For testing, use Xcode debug command (see TESTING_GUIDE.md)
+- For testing, use the Xcode debug command (see `TESTING_GUIDE.md`)
 
-### Issue: "Web views show blank page"
-**Fix:** Check:
-1. Tailscale is connected on device
-2. Server URL doesn't have typos
-3. Flask server is running and accessible
-4. Check Xcode console for WKWebView errors
+### Web views show a blank page
+- Tailscale is connected on device
+- Server URL has no typos
+- Flask server is running and reachable
+- Check Xcode console for WKWebView errors
 
 ---
 
-## Building & Running
+## Building and running
 
-### For Development (Debug)
-
+### Development (debug)
 1. Connect iPhone via USB (or use WiFi debugging)
-2. Select iPhone as target device in Xcode toolbar
-3. Trust computer on iPhone if prompted
+2. Select iPhone as target device in the Xcode toolbar
+3. Trust the computer on iPhone if prompted
 4. Cmd+R to build and run
-5. Watch Xcode console for logs
+5. Watch the Xcode console for logs
 
-### For TestFlight / Production
-
+### TestFlight / production
 1. Select "Any iOS Device (arm64)" as target
 2. Product → Archive
 3. Upload to App Store Connect
 4. Create TestFlight build
-5. Install via TestFlight app on iPhone
+5. Install via TestFlight on iPhone
 
-**Note:** Background tasks work more reliably in TestFlight/production builds than in debug builds run from Xcode.
+Background tasks fire more reliably in TestFlight/production builds than in debug builds run from Xcode.
 
 ---
 
-## Debugging Tips
+## Debugging tips
 
-### View Scheduled Notifications
+### View scheduled notifications
+Add a temporary debug button to `SyncSettingsView`:
+
 ```swift
-// Add temporary debug button in SyncSettingsView:
 Button("Show Scheduled Notifications") {
     UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-        print("📬 Scheduled notifications (\(requests.count)):")
+        print("Scheduled notifications (\(requests.count)):")
         for req in requests {
             print("  - \(req.identifier): \(req.content.title) at \(req.trigger?.description ?? "immediate")")
         }
@@ -205,39 +193,40 @@ Button("Show Scheduled Notifications") {
 }
 ```
 
-### View Background Task Status
-In Xcode console after app launch, check for:
+### View background task status
+After app launch, the Xcode console should show:
+
 ```
 BGTaskScheduler: registered task com.biotracking.healthsync.daily
 BGTaskScheduler: scheduled task for <date>
 ```
 
-### Force Background Sync (Xcode Only)
-Pause in debugger, run in console:
+### Force background sync (Xcode only)
+Pause the debugger, then in the console:
+
 ```objc
 e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"com.biotracking.healthsync.daily"]
 ```
 
-### Check HealthKit Permissions
-Health app → Sharing → Apps → healthsync
-Should show all requested data types with Read permission
+### Check HealthKit permissions
+Health app → Sharing → Apps → healthsync should show all requested data types with Read permission.
 
 ---
 
-## Final Verification
+## Final verification
 
-Before marking the project complete:
+Before considering the project setup complete:
 
 - [ ] Project builds without warnings
 - [ ] All capabilities enabled (HealthKit, Background Modes)
 - [ ] Info.plist has all required keys
-- [ ] Runs on physical iPhone (not just Simulator)
+- [ ] Runs on a physical iPhone
 - [ ] HealthKit authorization works
 - [ ] Manual sync works
 - [ ] Web views load biotracker pages
 - [ ] Notifications permission requested
-- [ ] Background task registered (check console)
-- [ ] Shortcuts appear in Shortcuts app
+- [ ] Background task registered (visible in console)
+- [ ] Shortcuts appear in the Shortcuts app
 - [ ] No crashes in normal usage
 
-**You're ready to test!** Proceed to TESTING_GUIDE.md for comprehensive testing steps.
+Next step: `TESTING_GUIDE.md` for the full testing procedure.

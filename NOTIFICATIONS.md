@@ -1,29 +1,29 @@
-# Notification Content Reference
+# Notification Reference
 
-This document shows exactly what each notification type looks like when delivered to the user.
+What each notification type looks like when delivered, and how it's wired up.
 
 ---
 
-## 1. Bedtime Log Reminder
+## 1. Bedtime log reminder
 
-**Category:** `BEDTIME_LOG`  
-**Trigger:** Daily repeating at configured hour (default 9:00 PM)  
-**Badge:** None (could add count of unlogged days in future)
+**Category:** `BEDTIME_LOG`
+**Trigger:** Daily, repeating at configured hour (default 9:00 PM)
+**Badge:** None (could surface count of unlogged days later)
 
 ### Appearance
 ```
 ┌─────────────────────────────────────┐
-│  healthsync                    9:00 PM │
-│                                       │
-│  Time to log                         │
-│  How was today?                      │
+│  healthsync                  9:00 PM│
+│                                     │
+│  Time to log                        │
+│  How was today?                     │
 └─────────────────────────────────────┘
 ```
 
 ### Behavior
-- **Tap:** Opens app to Log tab
-- **Swipe away:** Dismissed (will repeat tomorrow)
-- **Long press:** Shows notification options (Turn Off, Settings)
+- Tap: opens app to Log tab
+- Swipe away: dismissed (will repeat tomorrow)
+- Long press: shows notification options (Turn Off, Settings)
 
 ### Implementation
 ```swift
@@ -36,25 +36,25 @@ content.categoryIdentifier = "BEDTIME_LOG"
 
 ---
 
-## 2. Medication Dose Reminder
+## 2. Medication dose reminder
 
-**Category:** `MED_DOSE`  
-**Trigger:** Specific time based on dose schedule from `/api/flare-status`  
-**Scheduled:** Once per dose, for tomorrow's doses  
+**Category:** `MED_DOSE`
+**Trigger:** Specific time based on dose schedule from `/api/flare-status`
+**Schedule:** Once per dose, for tomorrow's doses
 
 ### Appearance
 ```
 ┌─────────────────────────────────────┐
-│  healthsync                    8:00 AM │
-│                                       │
-│  Medication Reminder                 │
-│  Time for 4mg methylprednisolone     │
+│  healthsync                  8:00 AM│
+│                                     │
+│  Medication Reminder                │
+│  Time for 4mg methylprednisolone    │
 └─────────────────────────────────────┘
 ```
 
 ### Behavior
-- **Tap:** Opens app to Log tab (where doses are logged)
-- **Swipe away:** Dismissed (won't repeat — one-time notification)
+- Tap: opens app to Log tab (where doses are logged)
+- Swipe away: dismissed (won't repeat — one-time notification)
 
 ### Implementation
 ```swift
@@ -68,36 +68,36 @@ for dose in doses {
 }
 ```
 
-### Example Doses
-- **8:00 AM:** "Time for 4mg methylprednisolone"
-- **12:00 PM:** "Time for 4mg methylprednisolone"
-- **4:00 PM:** "Time for 4mg methylprednisolone"
-- **8:00 PM:** "Time for 4mg methylprednisolone"
+### Example doses
+- 8:00 AM — "Time for 4mg methylprednisolone"
+- 12:00 PM — "Time for 4mg methylprednisolone"
+- 4:00 PM — "Time for 4mg methylprednisolone"
+- 8:00 PM — "Time for 4mg methylprednisolone"
 
-*(Typical medrol pack taper schedule)*
+(Typical medrol pack taper schedule.)
 
 ---
 
-## 3. Flare Risk Alert — Threshold Crossed
+## 3. Flare risk alert — threshold crossed
 
-**Category:** `FLARE_THRESHOLD`  
-**Trigger:** Immediate when evening sync detects `predicted_flare == true`  
+**Category:** `FLARE_THRESHOLD`
+**Trigger:** Immediate, when evening sync detects `predicted_flare == true`
 **De-duplication:** Won't re-alert same day
 
 ### Appearance
 ```
 ┌─────────────────────────────────────┐
 │  healthsync                     Now │
-│                                       │
-│  Flare Risk Elevated                 │
-│  Flare risk is elevated — score 9.2/ │
-│  20. Take it easy tomorrow.          │
+│                                     │
+│  Flare Risk Elevated                │
+│  Flare risk is elevated — score 9.2/│
+│  20. Take it easy tomorrow.         │
 └─────────────────────────────────────┘
 ```
 
 ### Behavior
-- **Tap:** Opens app (no specific tab)
-- **High priority:** Uses default sound, shows on lock screen
+- Tap: opens app (no specific tab)
+- High priority: default sound, shows on lock screen
 
 ### Implementation
 ```swift
@@ -108,34 +108,34 @@ content.sound = .default
 content.categoryIdentifier = "FLARE_THRESHOLD"
 ```
 
-### When It Fires
-- Server calculates flare score >= threshold (default: 8.0)
-- Returns `predicted_flare: true` in /api/flare-status
-- Background sync evaluates condition, schedules notification
-- Typical timing: Between 8-10 PM (during background sync window)
+### When it fires
+- Server calculates flare score >= threshold (default 8.0)
+- Returns `predicted_flare: true` in `/api/flare-status`
+- Background sync evaluates the condition and schedules the notification
+- Typical timing: 8–10 PM (during the background sync window)
 
 ---
 
-## 4. Flare Risk Alert — Rapid Trend
+## 4. Flare risk alert — rapid trend
 
-**Category:** `FLARE_TREND`  
-**Trigger:** Immediate when evening sync detects score_delta >= threshold (default 3.0)  
+**Category:** `FLARE_TREND`
+**Trigger:** Immediate, when evening sync detects `score_delta >= threshold` (default 3.0)
 **De-duplication:** Won't re-alert same day
 
 ### Appearance
 ```
 ┌─────────────────────────────────────┐
 │  healthsync                     Now │
-│                                       │
-│  Risk Score Rising                   │
-│  Risk score jumped +3.5 today — watch│
-│  for flare signals.                  │
+│                                     │
+│  Risk Score Rising                  │
+│  Risk score jumped +3.5 today —     │
+│  watch for flare signals.           │
 └─────────────────────────────────────┘
 ```
 
 ### Behavior
-- **Tap:** Opens app (no specific tab)
-- **High priority:** Uses default sound, shows on lock screen
+- Tap: opens app (no specific tab)
+- High priority: default sound, shows on lock screen
 
 ### Implementation
 ```swift
@@ -146,65 +146,64 @@ content.sound = .default
 content.categoryIdentifier = "FLARE_TREND"
 ```
 
-### When It Fires
-- Server calculates: today's score - yesterday's score >= 3.0
-- Returns `score_delta: 3.5` (or higher) in /api/flare-status
-- Background sync evaluates condition, schedules notification
-- Can fire same evening as threshold alert (independent conditions)
+### When it fires
+- Server calculates today's score minus yesterday's score >= 3.0
+- Returns `score_delta: 3.5` (or higher) in `/api/flare-status`
+- Background sync evaluates and schedules
+- Can fire same evening as a threshold alert (independent conditions)
 
 ---
 
-## Alert Combinations
+## Alert combinations
 
-User can receive multiple alerts in one evening:
+Multiple alerts can land in one evening:
 
-### Example: Bad Day
+### Example: bad day
 ```
-8:30 PM - "Risk Score Rising" (delta +3.5)
-8:30 PM - "Flare Risk Elevated" (score 9.2/20)
-9:00 PM - "Time to log" (bedtime reminder)
+8:30 PM — "Risk Score Rising" (delta +3.5)
+8:30 PM — "Flare Risk Elevated" (score 9.2/20)
+9:00 PM — "Time to log" (bedtime reminder)
 ```
 
-All three are independent and provide different information:
-- **Trend alert** → Things got worse quickly today
-- **Threshold alert** → Absolute risk level is high
-- **Bedtime reminder** → Time to log the day
+Each carries different information:
+- Trend alert — things got worse quickly today
+- Threshold alert — absolute risk level is high
+- Bedtime reminder — time to log the day
 
 ---
 
-## Notification Timing
+## Notification timing
 
-### Scheduled (Repeating)
-- **Bedtime Log:** Daily at configured hour (9:00 PM default)
+### Scheduled (repeating)
+- Bedtime log: daily at configured hour (9:00 PM default)
 
-### Scheduled (One-time)
-- **Med Doses:** Tomorrow at specific times (8:00 AM, 12:00 PM, etc.)
+### Scheduled (one-time)
+- Med doses: tomorrow at specific times (8:00 AM, 12:00 PM, etc.)
 
-### Immediate (During Background Sync)
-- **Flare Threshold:** Fires during evening sync (~8-10 PM)
-- **Flare Trend:** Fires during evening sync (~8-10 PM)
+### Immediate (during background sync)
+- Flare threshold: fires during evening sync (~8–10 PM)
+- Flare trend: fires during evening sync (~8–10 PM)
 
 ---
 
-## Testing Notifications
+## Testing notifications
 
-### Quick Test (10-second delay)
-Add to SyncSettingsView for testing:
+### Quick test (10-second delay)
+Add to `SyncSettingsView` for testing:
 ```swift
 Button("Test Notification") {
     let content = UNMutableNotificationContent()
     content.title = "Test Alert"
     content.body = "This is a test notification"
     content.sound = .default
-    
+
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)
     let request = UNNotificationRequest(identifier: "test", content: content, trigger: trigger)
     UNUserNotificationCenter.current().add(request)
 }
 ```
 
-### View Scheduled Notifications
-Add debug button:
+### View scheduled notifications
 ```swift
 Button("Show Scheduled") {
     UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
@@ -216,7 +215,7 @@ Button("Show Scheduled") {
 }
 ```
 
-### View Delivered Notifications
+### View delivered notifications
 ```swift
 Button("Show Delivered") {
     UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
@@ -230,181 +229,163 @@ Button("Show Delivered") {
 
 ---
 
-## Notification Permissions
+## Notification permissions
 
-User sees this system prompt on first launch:
+System prompt on first launch:
 
 ```
 ┌─────────────────────────────────────┐
 │  "healthsync" Would Like to Send    │
-│  You Notifications                   │
-│                                       │
+│  You Notifications                  │
+│                                     │
 │  Notifications may include alerts,  │
 │  sounds, and icon badges. These     │
 │  can be configured in Settings.     │
-│                                       │
+│                                     │
 │     [ Don't Allow ]  [ Allow ]      │
 └─────────────────────────────────────┘
 ```
 
-**If user taps "Don't Allow":**
+If user taps "Don't Allow":
 - Master toggle in app settings shows OFF
-- Tapping toggle shows system prompt to open Settings
-- User must manually enable in iOS Settings → Notifications → healthsync
+- Tapping the toggle prompts to open Settings
+- User must enable in iOS Settings → Notifications → healthsync manually
 
-**If user taps "Allow":**
+If user taps "Allow":
 - All notification types enabled by default
-- User can configure in app settings (enable/disable, change times)
-- Can also customize in iOS Settings (turn off sounds, badges, etc.)
+- Configurable in app settings (enable/disable, change times)
+- Can also be customized in iOS Settings (sounds, badges, etc.)
 
 ---
 
-## Notification Settings Hierarchy
+## Settings hierarchy
 
-### App-Level Controls
-In app (SyncSettingsView):
-- **Master toggle:** Enable/disable all notifications
-- **Bedtime hour:** When to send log reminder
-- **Sync hour:** When to run background sync (affects flare alert timing)
-- **Trend threshold:** How much delta triggers trend alert
+### App-level (SyncSettingsView)
+- Master toggle — enable/disable all notifications
+- Bedtime hour — when to send the log reminder
+- Sync hour — when to run background sync (affects flare alert timing)
+- Trend threshold — how much delta triggers a trend alert
 
-### iOS System Controls
-In Settings → Notifications → healthsync:
-- **Allow Notifications:** ON/OFF (master)
-- **Show in Notification Center:** ON/OFF
-- **Sounds:** ON/OFF
-- **Badges:** ON/OFF
-- **Show on Lock Screen:** ON/OFF
-- **Show in CarPlay:** ON/OFF
-- **Notification Grouping:** Automatic/By App/Off
+### iOS system (Settings → Notifications → healthsync)
+- Allow Notifications — master on/off
+- Show in Notification Center
+- Sounds
+- Badges
+- Show on Lock Screen
+- Show in CarPlay
+- Notification Grouping (Automatic / By App / Off)
 
-### Focus Mode
-User can silence notifications during Focus modes:
-- Settings → Focus → [Mode] → Apps → healthsync
-- Options: Allow Notifications / Silence Notifications
-- Can set different rules per Focus mode (Sleep, Work, etc.)
+### Focus modes
+Settings → Focus → [Mode] → Apps → healthsync. Allow or silence per Focus mode (Sleep, Work, etc.).
 
 ---
 
 ## Accessibility
 
 ### VoiceOver
-All notifications are VoiceOver-compatible:
-- Speaks title + body
-- Can navigate to app via tap
+All notifications are VoiceOver-compatible — speaks title and body, navigable to the app via tap.
 
-### Font Size
-Notification text respects iOS Dynamic Type:
-- Larger text sizes render correctly
-- Body text may truncate if very long
+### Font size
+Notifications respect iOS Dynamic Type. Body text may truncate when very long.
 
-### Reduce Motion
-Notification banners respect Reduce Motion setting:
-- Fade in instead of slide if enabled
+### Reduce motion
+Notification banners fade in instead of sliding when Reduce Motion is enabled.
 
 ---
 
-## Best Practices
+## Best practices
 
-### Keep Body Text Concise
+### Keep body text concise
 - Notifications truncate after ~150 characters
-- Most important info should be in first ~60 characters
-- Use em dash (—) not hyphen (-) for readability
+- Most important info should be in the first ~60 characters
+- Use em dash (—) instead of hyphen (-) for readability
 
-### Actionable Information
-- Tell user what to do: "Take it easy tomorrow"
-- Give context: "score 9.2/20" (not just "high risk")
-- Be specific: "4mg methylprednisolone" (not just "your med")
+### Actionable information
+- Tell the user what to do: "Take it easy tomorrow"
+- Give context: "score 9.2/20" rather than "high risk"
+- Be specific: "4mg methylprednisolone" rather than "your med"
 
-### Avoid Notification Fatigue
-- De-duplicate: Don't re-alert same day
-- Consolidate: One notification per event, not multiple
-- Respect user settings: Honor master toggle
+### Avoid notification fatigue
+- De-duplicate: don't re-alert same day
+- Consolidate: one notification per event, not multiple
+- Respect user settings: honor the master toggle
 
 ### Timing
-- Bedtime reminder: After dinner, before bed (9 PM works well)
-- Med reminders: At actual dose times (not "you have doses today")
-- Flare alerts: Evening so user can plan tomorrow
+- Bedtime reminder: after dinner, before bed (9 PM works well)
+- Med reminders: at actual dose times, not "you have doses today"
+- Flare alerts: evening, so the user can plan tomorrow
 
 ---
 
-## Future Enhancements (Not Implemented Yet)
+## Future enhancements (not implemented)
 
-### Notification Actions
-Add quick actions to notifications:
+### Notification actions
+Quick actions on notifications:
 
-**Med Dose:**
-- "Mark Taken" → POST to server without opening app
-- "Skip Dose" → Log as skipped
+Med dose:
+- "Mark Taken" — POST to server without opening the app
+- "Skip Dose" — log as skipped
 
-**Bedtime Log:**
-- "Log Now" → Deep link with quick entry form
-- "Remind Me in 30 Min" → Snooze
+Bedtime log:
+- "Log Now" — deep link with quick entry form
+- "Remind Me in 30 Min" — snooze
 
-**Flare Alert:**
-- "View Risk Factors" → Open to Risk tab
-- "Dismiss" → Standard dismissal
+Flare alert:
+- "View Risk Factors" — open to Risk tab
+- "Dismiss" — standard dismissal
 
-### Rich Notifications
-- Attach small chart image showing score trend
-- Show avatar/icon for med type
+### Rich notifications
+- Attach a small chart image showing the score trend
+- Show an icon for the med type
 
-### Notification Grouping
+### Notification grouping
 - Group all med doses under one expandable notification
 - Separate thread IDs for flare alerts vs reminders
 
-### Critical Alerts
-- For extremely high flare risk (score > 15?)
+### Critical alerts
+- For very high flare risk (score > 15?)
 - Bypasses Do Not Disturb
 - Requires special entitlement
 
 ---
 
-## Notification Content Guidelines
+## Content guidelines
 
 ### Title
-- 3-5 words max
+- 3–5 words max
 - Action-oriented or state-indicating
-- Examples:
-  - ✅ "Time to log"
-  - ✅ "Medication Reminder"
-  - ✅ "Flare Risk Elevated"
-  - ❌ "healthsync notification"
-  - ❌ "You have an alert"
+- Good: "Time to log", "Medication Reminder", "Flare Risk Elevated"
+- Avoid: "healthsync notification", "You have an alert"
 
 ### Body
 - One sentence preferred, two max
 - Include actionable data (numbers, specifics)
-- End with what user should do
-- Examples:
-  - ✅ "How was today?" (clear CTA)
-  - ✅ "Time for 4mg methylprednisolone" (specific)
-  - ✅ "Risk score jumped +3.5 today — watch for flare signals." (data + action)
-  - ❌ "You should check the app"
-  - ❌ "Something happened with your biotracker account"
+- End with what the user should do
+- Good: "How was today?", "Time for 4mg methylprednisolone", "Risk score jumped +3.5 today — watch for flare signals."
+- Avoid: "You should check the app", "Something happened with your biotracker account"
 
 ### Sound
 - Use `.default` for most notifications
 - Consider silent for low-priority info
-- Critical alerts get special sound (not implemented)
+- Critical alerts get a special sound (not implemented)
 
 ---
 
-## Debugging Notification Issues
+## Debugging
 
-### Notifications Not Appearing
+### Notifications not appearing
 
-**Check 1:** Permission granted?
+Check 1: permission granted?
 ```swift
 UNUserNotificationCenter.current().getNotificationSettings { settings in
     print("Authorization status: \(settings.authorizationStatus)")
-    // .authorized = good
-    // .denied = user declined
+    // .authorized   = good
+    // .denied       = user declined
     // .notDetermined = haven't asked yet
 }
 ```
 
-**Check 2:** Notification scheduled?
+Check 2: notification scheduled?
 ```swift
 UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
     print("Pending: \(requests.count)")
@@ -414,40 +395,39 @@ UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
 }
 ```
 
-**Check 3:** Focus mode blocking?
-- Check Control Center → Focus indicator
+Check 3: Focus mode blocking?
+- Check Control Center for the Focus indicator
 - Disable temporarily to test
 
-**Check 4:** Notification delivered but cleared?
+Check 4: delivered but cleared?
 ```swift
 UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
     print("Delivered: \(notifications.count)")
 }
 ```
 
-### Duplicate Notifications
+### Duplicate notifications
 
-**Issue:** Same notification fires multiple times  
-**Cause:** Not removing old requests before scheduling new  
-**Fix:** Call `removePendingNotificationRequests()` first
+Symptom: same notification fires multiple times.
+Cause: not removing old requests before scheduling new ones.
+Fix: call `removePendingNotificationRequests()` first.
 
-Example in NotificationManager:
 ```swift
-// Remove old bedtime reminders before scheduling new one
+// Remove old bedtime reminders before scheduling a new one
 center.removePendingNotificationRequests(withIdentifiers: ["bedtime_log_daily"])
 ```
 
-### Wrong Timing
+### Wrong timing
 
-**Issue:** Notification fires at unexpected time  
-**Cause:** Timezone mismatch or calendar component error  
-**Fix:** Always use `Calendar.current` and verify components
+Symptom: notification fires at unexpected time.
+Cause: timezone mismatch or calendar component error.
+Fix: always use `Calendar.current` and verify components.
 
 ```swift
 var components = DateComponents()
 components.hour = 21
 components.minute = 0
-// Use current calendar, not UTC!
+// Use the current calendar, not UTC
 let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
 ```
 
@@ -455,11 +435,11 @@ let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: t
 
 ## Summary
 
-Your app has 4 notification types with clear purposes:
+Four notification types, each with a distinct purpose:
 
-1. **Bedtime Log** → Habit formation (daily log entry)
-2. **Med Doses** → Medication adherence (take on time)
-3. **Flare Threshold** → Risk awareness (score crossed threshold)
-4. **Flare Trend** → Early warning (rapid score increase)
+1. Bedtime log — habit formation (daily log entry)
+2. Med doses — medication adherence (take on time)
+3. Flare threshold — risk awareness (score crossed threshold)
+4. Flare trend — early warning (rapid score increase)
 
-All are scheduled locally (no server push), respect user preferences, and provide actionable information. Implementation is complete and ready to test! 🔔
+All scheduled locally (no server push). All respect user preferences. All carry actionable information.

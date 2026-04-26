@@ -1,25 +1,24 @@
-# Biotracker iOS Companion App — Architecture Overview
+# SardinesSync Architecture
 
-**Version:** 1.0  
-**Date:** 2026-04-05  
-**Platform:** iOS 17+, Swift 5  
-**Author:** Alaric + Aplaude (Claude Opus)
+**Version:** 1.0
+**Date:** 2026-04-05
+**Platform:** iOS 17+, Swift 5
+**Authors:** Alaric Moore, with Aplaude (Claude Opus)
+
+## Overview
+
+SardinesSync is the iOS companion to the Flask-based biotracker server. It provides:
+
+- Automatic daily sync of HealthKit data (steps, HRV, heart rate, sleep temp, UV exposure, etc.)
+- Embedded web views for the biotracker mobile pages (log, forecast)
+- Local notifications for medication reminders, bedtime logging, and flare risk alerts
+- iOS Shortcuts integration for automation and Siri
+
+Design principles: background delivery, privacy-first (no third-party network destinations), HealthKit-native.
 
 ---
 
-## Executive Summary
-
-The Biotracker iOS companion app extends the Flask-based biotracker web app with:
-- **Automatic daily sync** of HealthKit data (steps, HRV, heart rate, sleep temp, UV exposure, etc.)
-- **Embedded web views** for accessing biotracker mobile pages (log, forecast) without switching apps
-- **Local push notifications** for medication reminders, bedtime logging, and flare risk alerts
-- **iOS Shortcuts integration** for automation and Siri support
-
-The app follows Apple's best practices for health apps: background delivery, privacy-first design, and seamless HealthKit integration.
-
----
-
-## Architecture Diagram
+## Architecture diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -75,7 +74,6 @@ The app follows Apple's best practices for health apps: background delivery, pri
 │                                                             │
 │  ┌──────────────────┐   ┌────────────────────────────────┐ │
 │  │ /api/health-sync │   │  /api/flare-status             │ │
-│  │ (existing)       │   │  (NEW — returns JSON for iOS)  │ │
 │  │ - Receives       │   │  - Current flare score         │ │
 │  │   HealthKit data │   │  - Predicted flare bool        │ │
 │  │ - Stores in DB   │   │  - Score delta (trend)         │ │
@@ -83,21 +81,21 @@ The app follows Apple's best practices for health apps: background delivery, pri
 │  └──────────────────┘   └────────────────────────────────┘ │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │            Mobile Web Pages (existing)                │  │
-│  │  - /mobile/log   → Embedded in iOS Log tab WKWebView │  │
-│  │  - /mobile/status → Embedded in iOS Risk tab         │  │
+│  │            Mobile Web Pages                          │  │
+│  │  - /mobile/log   → embedded in iOS Log tab          │  │
+│  │  - /mobile/status → embedded in iOS Risk tab        │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Data Flow
+## Data flow
 
-### 1. Manual Sync (User-Initiated)
+### 1. Manual sync
 
 ```
-User taps "Sync Health Data" button
+User taps "Sync Health Data"
   ↓
 ContentView → HealthSyncer.syncNow()
   ↓
@@ -132,7 +130,7 @@ HealthSyncer updates @Published lastResult
 UI shows "synced 9 fields: steps, hrv, ..."
 ```
 
-### 2. Automatic Evening Sync (Background)
+### 2. Automatic evening sync (background)
 
 ```
 iOS triggers BGAppRefreshTask at ~8 PM
@@ -165,7 +163,7 @@ Step 7: BackgroundSyncTask.scheduleNextSync()
   - Queues next day's background task
 ```
 
-### 3. Notification Delivery → User Action
+### 3. Notification delivery to user action
 
 ```
 iOS delivers notification at scheduled time
@@ -186,20 +184,21 @@ App opens with Log web view visible
 
 ---
 
-## Key Components
+## Components
 
 ### HealthSyncer.swift
-**Purpose:** Core HealthKit integration and network sync  
-**Responsibilities:**
+HealthKit integration and network sync.
+
+Responsibilities:
 - Request HealthKit authorization for all needed data types
-- Query HealthKit using optimized methods (sum, average, most recent)
+- Query HealthKit using sum, average, and most-recent helpers
 - Compute RMSSD from heartbeat series (RR intervals during sleep)
 - Format data as JSON payload
-- POST to /api/health-sync with Bearer token authentication
-- Handle backfill for historical data (days 0 to N in reverse chronological order)
+- POST to `/api/health-sync` with Bearer token authentication
+- Backfill historical data, day-by-day in reverse chronological order
 - Provide both UI-updating (`syncNow()`) and silent (`syncNowSilent()`) variants
 
-**Key Methods:**
+Key methods:
 - `requestAuthorization()` — one-time HealthKit permission request
 - `syncNow()` — interactive sync with UI feedback
 - `syncNowSilent()` — background sync with completion callback
@@ -207,56 +206,59 @@ App opens with Log web view visible
 - Query helpers: `querySum()`, `queryAverage()`, `queryMostRecent()`, `queryRMSSD()`
 
 ### BackgroundSyncTask.swift
-**Purpose:** Automated daily sync via BGTaskScheduler  
-**Responsibilities:**
+Automated daily sync via BGTaskScheduler.
+
+Responsibilities:
 - Register `com.biotracking.healthsync.daily` task with iOS
 - Schedule next execution around target hour (default 8 PM)
-- Execute full sync → flare check → notification scheduling pipeline
+- Execute the sync → flare check → notification scheduling pipeline
 - Handle task expiration gracefully
 - Update last sync timestamp
 
-**Key Methods:**
+Key methods:
 - `register()` — called once at app init
 - `scheduleNextSync()` — queues next day's task
 - `handle(task:)` — executes the background workflow
 
-**Important:** iOS controls actual execution time. App *requests* 8 PM but may run earlier/later based on system heuristics.
+iOS controls actual execution time. The app *requests* 8 PM, but the system may run earlier or later based on its own heuristics.
 
 ### FlareChecker.swift
-**Purpose:** Fetch flare risk data from Flask API  
-**Responsibilities:**
-- GET /api/flare-status with Bearer token
+Fetch flare risk data from the Flask API.
+
+Responsibilities:
+- GET `/api/flare-status` with Bearer token
 - Decode JSON response into Swift structs
 - Evaluate alert conditions (threshold crossed, rapid trend)
 - Return structured data for notification scheduling
 
-**Data Models:**
+Data models:
 - `FlareStatus` — decoded API response
 - `FlareStatusFactor` — individual risk factors (UV, symptoms, etc.)
 - `DoseReminder` — medication doses due
 - `AlertEvaluation` — processed alert decision
 
-**Key Methods:**
+Key methods:
 - `fetchStatus()` — async network call
-- `evaluate()` — business logic for alert triggers
+- `evaluate()` — alert-trigger logic
 
 ### NotificationManager.swift
-**Purpose:** All local notification handling  
-**Responsibilities:**
+Local notification handling.
+
+Responsibilities:
 - Request notification permissions
-- Register notification categories (BEDTIME_LOG, MED_DOSE, FLARE_THRESHOLD, FLARE_TREND)
+- Register categories (BEDTIME_LOG, MED_DOSE, FLARE_THRESHOLD, FLARE_TREND)
 - Schedule notifications with appropriate triggers
 - Handle notification taps (deep linking)
 - De-duplicate alerts (don't re-alert same day)
-- Present notifications even when app is in foreground
+- Present notifications even when the app is in foreground
 
-**Notification Types:**
-1. **Bedtime Log Reminder** — daily repeating at configured hour
-2. **Med Dose Reminders** — scheduled per /api/flare-status response
-3. **Flare Threshold Alert** — when predicted_flare == true
-4. **Flare Trend Alert** — when score_delta exceeds threshold
+Notification types:
+1. Bedtime log reminder — daily repeating at configured hour
+2. Med dose reminders — scheduled per `/api/flare-status` response
+3. Flare threshold alert — when `predicted_flare == true`
+4. Flare trend alert — when `score_delta` exceeds threshold
 
-**Key Methods:**
+Key methods:
 - `setup()` — register categories, set delegate
 - `requestAuthorization()` — iOS permission prompt
 - `scheduleBedtimeReminder()` — UNCalendarNotificationTrigger (repeating)
@@ -265,23 +267,25 @@ App opens with Log web view visible
 - `scheduleFlareTrendAlert()` — immediate trigger with de-dupe
 
 ### BioTrackerWebView.swift
-**Purpose:** Embed Flask mobile pages in native UI  
-**Responsibilities:**
-- Wrap WKWebView in SwiftUI view
+Embed Flask mobile pages in native UI.
+
+Responsibilities:
+- Wrap WKWebView in a SwiftUI view
 - Handle loading states and errors
 - Persist cookies for authentication
 - Prevent external navigation (open in Safari instead)
-- Show user-friendly error when Tailscale unreachable
+- Show user-friendly error when Tailscale is unreachable
 
-**Features:**
+Features:
 - Loading indicator during page load
 - Retry button on network failure
 - Gestural back/forward navigation
-- Domain-scoped navigation (stays within <YOUR_SERVER>)
+- Domain-scoped navigation (stays within the biotracker host)
 
 ### SyncSettingsView.swift
-**Purpose:** User-facing settings and sync controls  
-**Responsibilities:**
+Settings and sync controls.
+
+Responsibilities:
 - Display server configuration (URL, token, user ID)
 - Manual sync button with visual feedback
 - HealthKit authorization trigger
@@ -289,7 +293,7 @@ App opens with Log web view visible
 - Historical backfill with progress tracking
 - Display last sync timestamp
 
-**Configuration Keys (AppStorage):**
+`@AppStorage` keys:
 - `serverURL` — Flask endpoint
 - `apiToken` — Bearer token
 - `userID` — numeric user ID
@@ -300,156 +304,157 @@ App opens with Log web view visible
 - `lastSyncTimestamp` — last successful sync ISO date
 
 ### ShortcutIntents.swift
-**Purpose:** iOS Shortcuts integration  
-**Responsibilities:**
-- Expose app actions to Shortcuts app
+iOS Shortcuts integration.
+
+Responsibilities:
+- Expose app actions to the Shortcuts app
 - Handle deep linking from Shortcuts
 - Execute background sync via Shortcuts/Siri
 
-**Actions:**
-1. **Open Biotracker Log** — posts notification to switch to Log tab
-2. **Sync Biotracker** — executes `syncNowSilent()`, returns success message
+Actions:
+1. Open Biotracker Log — posts notification to switch to Log tab
+2. Sync Biotracker — executes `syncNowSilent()`, returns success message
 
-**Usage:**
+Usage:
 - Add to Shortcuts app for manual triggers
-- Use in iOS Automations (e.g., "Every day at 9 PM → Open Biotracker Log")
+- Use in iOS Automations (e.g. "every day at 9 PM → Open Biotracker Log")
 - Invoke via Siri ("Hey Siri, sync biotracker")
 
 ---
 
-## Security & Privacy
+## Security and privacy
 
-### HealthKit Data
-- **Never leaves the device unencrypted** — only transmitted over HTTPS
-- **User controls permissions** — can revoke HealthKit access anytime via Health app
-- **No HealthKit data stored locally** — queried on-demand, sent to server, discarded
-- **Background delivery respects user permissions** — if user revokes access, sync fails gracefully
+### HealthKit data
+- Never leaves the device unencrypted; transmitted over HTTPS only
+- User controls permissions via the Health app and can revoke any time
+- No HealthKit data stored locally — queried on demand, sent to server, discarded
+- Background delivery respects revocation; sync fails gracefully when access is removed
 
-### Network Authentication
-- **Bearer token authentication** — token stored in iOS Keychain via `@AppStorage` (Keychain-backed)
-- **HTTPS only** — all network requests use TLS
-- **No hardcoded credentials** — user must configure token manually
+### Network authentication
+- Bearer token stored via `@AppStorage` (Keychain-backed)
+- HTTPS only
+- No hardcoded credentials; user configures token manually
 
-### Notification Privacy
-- **All processing on-device** — app fetches data, decides alerts locally
-- **No remote notifications (APNs)** — no third-party servers involved
-- **User controls notification permissions** — can disable per-category in iOS Settings
+### Notification privacy
+- All processing on-device
+- No remote notifications (APNs); no third-party servers
+- User controls per-category permissions in iOS Settings
 
-### Web View Isolation
-- **Default WKWebView data store** — persistent cookies, but isolated from Safari
-- **No JavaScript injection** — web view displays biotracker pages unmodified
-- **Domain-scoped navigation** — can't navigate to external sites (opens Safari instead)
-
----
-
-## Scalability & Performance
-
-### HealthKit Query Optimization
-- **Predicate-based queries** — only fetch data for specific date ranges
-- **Aggregated results** — use HKStatisticsQuery for sums/averages (efficient)
-- **Asynchronous execution** — all queries run in background, callback on completion
-- **Rate limiting on backfill** — 0.5s delay between days to avoid server overload
-
-### Background Task Efficiency
-- **Minimal execution time** — queries + network typically complete in <30 seconds
-- **Expiration handling** — abort gracefully if iOS terminates task early
-- **Battery awareness** — iOS automatically throttles background tasks on low battery
-
-### Network Resilience
-- **Timeout handling** — 15-second timeout on API requests
-- **Error recovery** — failed sync doesn't crash, retries next cycle
-- **Offline graceful degradation** — web views show error, notifications don't fire
+### Web view isolation
+- Default WKWebView data store — persistent cookies, but isolated from Safari
+- No JavaScript injection
+- Domain-scoped navigation; external links open in Safari
 
 ---
 
-## Future Enhancements (Out of Scope for v1.0)
+## Performance
 
-### Potential Additions
-- **Widget** — Today's flare score on home screen
-- **Watch app** — Quick log entry, step count display
-- **HealthKit write** — Update HealthKit with corrected data from server
-- **APNs integration** — Server-initiated push notifications (requires server changes)
-- **Local caching** — Store last flare status for offline viewing
-- **Charts** — Native Swift Charts views for historical trends (instead of web views)
-- **Siri suggestions** — Proactive suggestions based on usage patterns
+### HealthKit query optimization
+- Predicate-based queries fetch only the requested date range
+- HKStatisticsQuery for sums and averages
+- Async execution with completion callbacks
+- 0.5s delay between days during backfill to avoid server overload
+
+### Background task efficiency
+- Queries plus network typically complete in under 30 seconds
+- Aborts gracefully on iOS task expiration
+- iOS throttles background tasks on low battery automatically
+
+### Network resilience
+- 15-second timeout on API requests
+- Failed sync doesn't crash; retries on the next cycle
+- Offline degradation: web views show error, notifications don't fire
 
 ---
 
-## Maintenance & Troubleshooting
+## Possible future additions
 
-### Common Issues
+Out of scope for v1.0:
 
-| Symptom | Likely Cause | Fix |
+- Widget showing today's flare score on the home screen
+- Watch app for quick log entry and step count
+- HealthKit write-back of corrected data from the server
+- APNs integration for server-initiated push (requires server changes)
+- Local caching of last flare status for offline viewing
+- Native Swift Charts views for historical trends
+- Siri suggestions based on usage patterns
+
+---
+
+## Maintenance
+
+### Common issues
+
+| Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | Background sync never runs | Low battery / Low Power Mode | Charge device, disable LPM |
-| Notifications don't fire | Permissions denied | Check Settings → Notifications |
+| Notifications don't fire | Permissions denied | Settings → Notifications |
 | HealthKit data missing | Permissions not granted | Health app → Sharing → healthsync |
-| Web views blank | Tailscale disconnected | Reconnect Tailscale VPN |
+| Web views blank | Tailscale disconnected | Reconnect Tailscale |
 | Sync fails with 401 | Invalid API token | Re-enter token in settings |
 
-### Debugging Tools
-- **Xcode Console** — view HealthKit query results, network responses
-- **BGTaskScheduler simulation** — force background task execution
-- **Notification Inspector** — view scheduled notifications in Settings
-- **Charles Proxy** — inspect network traffic (HTTPS decryption)
+### Debugging tools
+- Xcode Console for HealthKit query results and network responses
+- BGTaskScheduler `_simulateLaunchForTaskWithIdentifier:` to force a run
+- Notification Inspector in iOS Settings
+- Charles Proxy for network traffic (HTTPS decryption)
 
-### Logging Strategy
-- Print statements in key methods (sync start/end, notification schedule)
+### Logging
+- Print statements at sync start/end and notification scheduling
 - Log API responses (status code, body)
-- Track background task execution (start time, completion status)
+- Track background task execution start time and completion status
 
-**Production:** Consider integrating OSLog for persistent logging without performance penalty.
+For production, consider OSLog for persistent logging without performance penalty.
 
 ---
 
 ## Dependencies
 
-### Apple Frameworks
-- **HealthKit** — health data access
-- **BackgroundTasks** — BGTaskScheduler for daily sync
-- **UserNotifications** — UNUserNotificationCenter for local notifications
-- **WebKit** — WKWebView for embedded web pages
-- **SwiftUI** — declarative UI
-- **AppIntents** — Shortcuts integration
+### Apple frameworks
+- HealthKit — health data access
+- BackgroundTasks — BGTaskScheduler for daily sync
+- UserNotifications — UNUserNotificationCenter for local notifications
+- WebKit — WKWebView for embedded web pages
+- SwiftUI — declarative UI
+- AppIntents — Shortcuts integration
 
-### Third-Party Libraries
-- **None** — pure Apple frameworks, no external dependencies
+### Third-party libraries
+None.
 
-### Server Dependencies
+### Server dependencies
 - Flask biotracker at `https://<YOUR_SERVER>`
-- `/api/health-sync` endpoint (existing)
-- `/api/flare-status` endpoint (NEW, must be implemented)
+- `/api/health-sync` endpoint
+- `/api/flare-status` endpoint
 
 ---
 
 ## Versioning
 
-**Current Version:** 1.0  
-**iOS Minimum:** 17.0  
-**Swift Version:** 5.x  
+**Current version:** 1.0
+**iOS minimum:** 17.0
+**Swift version:** 5.x
 
-**Change Log:**
-- 2026-04-05: Initial implementation (all features from spec)
+**Change log:**
+- 2026-04-05 — Initial implementation
 
 ---
 
 ## Credits
 
-**Developer:** Alaric Moore  
-**AI Assistant:** Aplaude (Claude Opus)  
-**Spec Author:** Alaric + Wolf (Claude Opus)  
-**Platform:** iOS / Swift / HealthKit  
+**Developer:** Alaric Moore
+**AI assistant:** Aplaude (Claude Opus)
+**Spec author:** Alaric, with Wolf (Claude Opus)
 
 ---
 
 ## License
 
-Personal project — all rights reserved.  
-Code is for Alaric's personal biotracker system and is not open source.
+Personal project, all rights reserved. Code is for Alaric's personal biotracker system and is not open source.
 
 ---
 
-**For implementation details, see:**
-- `XCODE_SETUP.md` — Project configuration checklist
-- `TESTING_GUIDE.md` — Comprehensive testing procedures
-- `flask_flare_status_endpoint.py` — Server-side API implementation guide
+## See also
+
+- `XCODE_SETUP.md` — project configuration checklist
+- `TESTING_GUIDE.md` — testing procedures
+- `NOTIFICATIONS.md` — notification reference

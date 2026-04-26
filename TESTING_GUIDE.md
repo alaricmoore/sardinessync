@@ -1,71 +1,67 @@
-# Biotracker iOS App Testing Guide
+# SardinesSync Testing Guide
 
-## Pre-Testing Setup
+## Pre-testing setup
 
-1. **Xcode Project Configuration**
-   - [ ] Verify Info.plist has `BGTaskSchedulerPermittedIdentifiers` array
-   - [ ] Verify Info.plist has `NSHealthShareUsageDescription`
-   - [ ] Check Signing & Capabilities → HealthKit is enabled
-   - [ ] Check Signing & Capabilities → Background Modes includes "Background processing"
-   - [ ] Verify healthsync.entitlements includes:
-         - `com.apple.developer.healthkit`
-         - `com.apple.developer.healthkit.background-delivery`
+1. **Xcode project configuration**
+   - [ ] Info.plist has `BGTaskSchedulerPermittedIdentifiers` array
+   - [ ] Info.plist has `NSHealthShareUsageDescription`
+   - [ ] Signing & Capabilities → HealthKit enabled
+   - [ ] Signing & Capabilities → Background Modes includes "Background processing"
+   - [ ] `healthsync.entitlements` includes:
+     - `com.apple.developer.healthkit`
+     - `com.apple.developer.healthkit.background-delivery`
 
-2. **Server Setup**
-   - [ ] Add `/api/flare-status` endpoint to Flask app.py
-   - [ ] Deploy updated Flask app to <YOUR_SERVER>
-   - [ ] Test endpoint manually: `curl -H "Authorization: Bearer YOUR_TOKEN" "https://<YOUR_SERVER>/api/flare-status?user_id=1"`
+2. **Server**
+   - [ ] `/api/flare-status` responds correctly:
+     - `curl -H "Authorization: Bearer YOUR_TOKEN" "https://<YOUR_SERVER>/api/flare-status?user_id=1"`
 
-3. **Device Setup**
-   - [ ] Install app on iPhone via Xcode
-   - [ ] Ensure Tailscale is connected
-   - [ ] Enable notifications in iOS Settings → healthsync → Notifications
+3. **Device**
+   - [ ] Install on iPhone via Xcode
+   - [ ] Tailscale connected
+   - [ ] iOS Settings → Notifications → healthsync → Notifications enabled
 
-## Feature Testing
+---
 
-### 1. HealthKit Authorization ✓
-- [ ] Launch app → Sync tab
+## Feature testing
+
+### 1. HealthKit authorization
+- [ ] Launch app, Sync tab
 - [ ] Tap "Authorize HealthKit"
-- [ ] Verify permission sheet appears
+- [ ] Permission sheet appears
 - [ ] Grant all requested permissions
-- [ ] Confirm "HealthKit authorized" message
+- [ ] "HealthKit authorized" message appears
 
-### 2. Manual Sync ✓
-- [ ] Fill in Server URL: `https://<YOUR_SERVER>/api/health-sync`
-- [ ] Fill in API Token (from your Flask config)
-- [ ] Fill in User ID: `1`
-- [ ] Tap "Sync Health Data" button
-- [ ] Verify "syncing..." state with progress indicator
+### 2. Manual sync
+- [ ] Server URL: `https://<YOUR_SERVER>/api/health-sync`
+- [ ] API Token: from Flask config
+- [ ] User ID: `1`
+- [ ] Tap "Sync Health Data"
+- [ ] "syncing..." state with progress indicator
 - [ ] Wait for completion
-- [ ] Verify "synced X fields: steps, hrv, ..." message
-- [ ] Check Flask server logs for successful POST
-- [ ] Verify data appears in biotracker web UI
+- [ ] "synced X fields: steps, hrv, ..." appears
+- [ ] Flask server logs show successful POST
+- [ ] Data appears in biotracker web UI
 
-### 3. WKWebView Integration ✓
-- [ ] Tap "Log" tab
-- [ ] Verify loading indicator appears
-- [ ] Verify biotracker log page loads
-- [ ] Test entering data in the web form
-- [ ] Tap "Risk" tab
-- [ ] Verify forecast/status page loads
-- [ ] Test navigation between web pages
-- [ ] Disconnect Tailscale
-- [ ] Verify error message: "Can't reach biotracker — Is Tailscale connected?"
-- [ ] Tap "Retry" button
-- [ ] Reconnect Tailscale, verify page loads
+### 3. WKWebView integration
+- [ ] Log tab shows loading indicator
+- [ ] Biotracker log page loads
+- [ ] Data entry in the web form works
+- [ ] Risk tab loads forecast/status page
+- [ ] Navigation between web pages works
+- [ ] Disconnect Tailscale; error message: "Can't reach biotracker — Is Tailscale connected?"
+- [ ] "Retry" button works after reconnecting Tailscale
 
-### 4. Notifications Setup ✓
-- [ ] Go to Sync tab → Notifications section
-- [ ] Toggle "Enable Notifications" ON
-- [ ] Verify system permission prompt (if first time)
-- [ ] Change "Bedtime Reminder" to desired hour
-- [ ] Change "Auto-Sync Target" to desired hour
-- [ ] Set "Trend Alert Threshold" (e.g., 3.0)
+### 4. Notification settings
+- [ ] Sync tab → Notifications section
+- [ ] "Enable Notifications" toggle on
+- [ ] System permission prompt appears (first time only)
+- [ ] Bedtime Reminder hour can be changed
+- [ ] Auto-Sync Target hour can be changed
+- [ ] Trend Alert Threshold can be set (e.g. 3.0)
 
-### 5. Bedtime Notification (Quick Test) 🧪
-**For testing, manually schedule a notification 10 seconds from now:**
+### 5. Bedtime notification (quick test)
+Schedule a notification 10 seconds out by adding a debug button to `SyncSettingsView`:
 
-In `SyncSettingsView.swift`, temporarily add a debug button:
 ```swift
 Button("Test Bedtime Notification (10s)") {
     let content = UNMutableNotificationContent()
@@ -73,7 +69,7 @@ Button("Test Bedtime Notification (10s)") {
     content.body = "How was today?"
     content.sound = .default
     content.categoryIdentifier = NotificationManager.bedtimeLogCategory
-    
+
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)
     let request = UNNotificationRequest(identifier: "test_bedtime", content: content, trigger: trigger)
     UNUserNotificationCenter.current().add(request)
@@ -82,54 +78,51 @@ Button("Test Bedtime Notification (10s)") {
 
 - [ ] Tap test button
 - [ ] Wait 10 seconds
-- [ ] Verify notification appears
-- [ ] Tap notification
-- [ ] Verify app opens to Log tab
+- [ ] Notification appears
+- [ ] Tap notification, app opens to Log tab
 - [ ] Remove debug button after testing
 
-### 6. Background Sync (Xcode Simulator) 🧪
-**Testing background tasks requires Xcode debugging:**
+### 6. Background sync (Xcode simulator)
 
 1. Run app on device from Xcode
-2. Ensure settings are configured (server URL, token, etc.)
-3. In Xcode → Debug menu → Pause execution (or just let it run)
-4. In Xcode Console (Cmd+Shift+Y), paste:
+2. Settings configured (server URL, token, etc.)
+3. In Xcode → Debug → Pause execution (or just let it run)
+4. Xcode console (Cmd+Shift+Y), paste:
    ```
    e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"com.biotracking.healthsync.daily"]
    ```
 5. Resume execution
-6. Watch console logs for:
+6. Watch console for:
    - "Starting background sync..."
    - HealthKit queries
    - Network requests
    - "Background sync completed"
-7. Check:
-   - [ ] lastSyncTimestamp updated in app UI
+7. Verify:
+   - [ ] `lastSyncTimestamp` updated in app UI
    - [ ] Data synced to server
    - [ ] Flare status fetched
-   - [ ] Notifications scheduled (check Notification Center → Scheduled)
+   - [ ] Notifications scheduled (Notification Center → Scheduled)
 
-### 7. Flare Alerts (Mock Data) 🧪
-**To test flare alerts, you need to:**
+### 7. Flare alerts (mock data)
 
-Option A: Modify server to return mock data:
-- Temporarily edit `/api/flare-status` to return `predicted_flare: true` and `score_delta: 4.0`
-- Trigger background sync (method above)
-- Verify both flare threshold AND trend alerts fire
+Two ways to trigger:
 
-Option B: Add debug button to force-fetch:
+Option A: temporarily edit `/api/flare-status` to return `predicted_flare: true` and `score_delta: 4.0`, then trigger a background sync. Both threshold and trend alerts should fire.
+
+Option B: add a debug button to force-fetch:
+
 ```swift
 Button("Test Flare Check") {
     FlareChecker.shared.fetchStatus(
-        serverURL: serverURL, 
-        apiToken: apiToken, 
+        serverURL: serverURL,
+        apiToken: apiToken,
         userID: userID
     ) { status in
         if let status = status, status.ok,
            let eval = FlareChecker.shared.evaluate(status: status, trendThreshold: 3.0) {
             if eval.thresholdCrossed {
                 NotificationManager.shared.scheduleFlareThresholdAlert(
-                    score: eval.score, 
+                    score: eval.score,
                     maxScore: eval.maxScore
                 )
             }
@@ -142,110 +135,110 @@ Button("Test Flare Check") {
 ```
 
 - [ ] Trigger flare check
-- [ ] Verify threshold alert fires when `predicted_flare == true`
-- [ ] Verify trend alert fires when delta >= threshold
-- [ ] Tap alerts, verify app behavior
-- [ ] Check de-duplication (shouldn't re-alert same day)
+- [ ] Threshold alert fires when `predicted_flare == true`
+- [ ] Trend alert fires when delta >= threshold
+- [ ] Tap alerts, observe app behavior
+- [ ] De-duplication holds (no re-alert same day)
 
-### 8. Med Dose Reminders 🧪
-**Requires Flask dose schedule implementation:**
+### 8. Med dose reminders
 
-If you have a dose schedule system:
+Requires Flask dose schedule support:
+
 - [ ] Add doses for tomorrow in Flask
 - [ ] Trigger background sync (simulates evening sync)
-- [ ] Check iOS Settings → Notifications → Scheduled
-- [ ] Verify dose reminders scheduled for tomorrow at correct times
-- [ ] Let one fire (or simulate time)
-- [ ] Tap notification, verify opens to Log tab
+- [ ] iOS Settings → Notifications → Scheduled
+- [ ] Dose reminders scheduled for tomorrow at correct times
+- [ ] Let one fire (or simulate the time)
+- [ ] Tapping notification opens to Log tab
 
-### 9. Shortcuts Integration ✓
-- [ ] Open iOS Shortcuts app
-- [ ] Create new shortcut
-- [ ] Search for "Open Biotracker Log"
-- [ ] Add action, save shortcut
-- [ ] Run shortcut
-- [ ] Verify app opens to Log tab
+### 9. Shortcuts integration
 
-- [ ] Create another shortcut
-- [ ] Search for "Sync Biotracker"
-- [ ] Add action, save shortcut
-- [ ] Run shortcut
-- [ ] Verify sync completes, check return message
+- [ ] iOS Shortcuts app → new shortcut
+- [ ] Search "Open Biotracker Log", add action, save
+- [ ] Run shortcut, app opens to Log tab
 
-- [ ] Optional: Create automation (Settings → Automation)
+- [ ] Another shortcut, search "Sync Biotracker", add action, save
+- [ ] Run shortcut, sync completes, return message visible
+
+- [ ] Optional: automation (Settings → Automation)
   - Trigger: Time of Day (9:00 PM)
-  - Action: Run "Open Biotracker Log" shortcut
+  - Action: run "Open Biotracker Log"
   - Test at 9 PM
 
-### 10. Historical Backfill ✓
-- [ ] Go to Sync tab
-- [ ] Scroll to "Historical Data" section
-- [ ] Select a preset (e.g., "Week" = 7 days)
-- [ ] Tap "Start Backfill"
-- [ ] Verify progress bar appears
-- [ ] Verify status updates: "Processing 2026-04-04 (1/7)..."
-- [ ] Wait for completion
-- [ ] Verify final message: "Completed! Synced X days, skipped Y (no data)"
-- [ ] Check server to confirm historical data populated
+### 10. Historical backfill
+- [ ] Sync tab → Historical Data section
+- [ ] Pick a preset (e.g. "Week" = 7 days)
+- [ ] "Start Backfill"
+- [ ] Progress bar appears
+- [ ] Status updates: "Processing 2026-04-04 (1/7)..."
+- [ ] Completes with "Synced X days, skipped Y (no data)"
+- [ ] Server confirms historical data populated
 
-## Production Testing
+---
+
+## Production testing
 
 After Xcode testing passes:
 
 1. **Real-world background sync**
-   - [ ] Set syncHour to current time + 1 hour
+   - [ ] Set `syncHour` to current time + 1 hour
    - [ ] Close app completely (swipe up from app switcher)
-   - [ ] Wait for the target hour
-   - [ ] Re-open app after ~5-15 minutes past target hour
+   - [ ] Wait until target hour
+   - [ ] Re-open app ~5–15 minutes after target hour
    - [ ] Check "Last auto-sync" timestamp
    - [ ] Verify data synced
 
 2. **Multi-day usage**
-   - [ ] Use app naturally for 3-5 days
+   - [ ] Use the app naturally for 3–5 days
    - [ ] Monitor notification delivery
    - [ ] Check sync reliability
    - [ ] Review battery impact (Settings → Battery)
 
 3. **Error handling**
    - [ ] Disconnect Tailscale, verify graceful degradation
-   - [ ] Invalid API token → verify error messages
-   - [ ] Airplane mode → verify no crashes, proper errors
+   - [ ] Invalid API token, verify clear error message
+   - [ ] Airplane mode, verify no crashes
+
+---
 
 ## Troubleshooting
 
 ### Background sync not firing
-- Check: Settings → General → Background App Refresh → healthsync (must be ON)
-- Check: Device has power (iOS throttles background tasks on low battery)
-- Check: Device is not in Low Power Mode
-- Try: Plug in device overnight (iOS prioritizes background tasks when charging)
+- Settings → General → Background App Refresh → healthsync must be on
+- Device must have power (iOS throttles background tasks on low battery)
+- Device must not be in Low Power Mode
+- Plug in device overnight (iOS prioritizes background tasks while charging)
 
 ### Notifications not appearing
-- Check: Settings → Notifications → healthsync → Allow Notifications (ON)
-- Check: Settings → Screen Time → Content & Privacy Restrictions → Allowed Apps → healthsync (ON if Screen Time is used)
-- Check: Do Not Disturb / Focus mode settings
+- Settings → Notifications → healthsync → Allow Notifications must be on
+- Settings → Screen Time → Content & Privacy Restrictions → Allowed Apps → healthsync (if Screen Time is in use)
+- Do Not Disturb / Focus mode
 
 ### HealthKit data not syncing
-- Check: iPhone has HealthKit data (Health app → Browse)
-- Check: HealthKit permissions granted (Health app → Sharing → Apps → healthsync)
-- Try: Re-authorize in app
+- iPhone has HealthKit data (Health app → Browse)
+- HealthKit permissions granted (Health app → Sharing → Apps → healthsync)
+- Re-authorize from inside the app
 
 ### Web views not loading
-- Check: Tailscale connection (Tailscale app → verify green)
-- Check: Server URL is correct (no typos, includes https://)
-- Check: Flask server is running
-- Try: Open <YOUR_SERVER> in Safari first
+- Tailscale connection is up (Tailscale app → green)
+- Server URL has no typos and starts with `https://`
+- Flask server is running
+- Open `https://<YOUR_SERVER>` in Safari first
 
-## Completion Criteria
+---
 
-✅ App is ready for production when:
+## Completion criteria
+
+The app is ready for production when:
+
 - [ ] All manual tests pass
-- [ ] Background sync works at least once
+- [ ] Background sync has worked at least once
 - [ ] Notifications deliver reliably
 - [ ] No crashes in 3 days of testing
-- [ ] Battery usage acceptable (<5% per day)
+- [ ] Battery usage under 5% per day
 - [ ] Web views load consistently on Tailscale
 - [ ] Shortcuts execute successfully
 
 ---
 
-**Note:** Background task scheduling on iOS is not guaranteed. Apple controls when background tasks actually run based on device usage patterns, battery level, and other factors. The app requests a specific time, but iOS may execute it earlier or later (typically within 1-4 hours of the requested time).
+**Note on background tasks:** iOS does not guarantee a specific execution time for background tasks. Apple's scheduler decides when to run them based on device usage patterns, battery level, and other factors. The app requests a target hour, but iOS may run earlier or later — typically within 1–4 hours of the requested time.
