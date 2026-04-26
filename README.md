@@ -1,27 +1,25 @@
+# SardinesSync
 
+iOS companion app for the SardinesTrack Flask server. Syncs HealthKit data to the server, fetches flare-risk forecasts, and embeds the Log and Risk pages via WKWebView.
 
+## What it does
 
+- TabView with Sync, Log, and Risk tabs
+- WKWebView for the biotracker Log and Risk mobile pages
+- HealthKit sync, manual and automatic
+- Daily background sync via `BGTaskScheduler`
+- Local notifications: bedtime, med doses, flare alerts
+- Flare-status API client (`/api/flare-status`)
+- iOS Shortcuts actions
+- Historical backfill
+- Settings UI
 
-Forgive this... its a work in progress, but it does mostly work. mostly. 
+## Setup
 
-### 1. Add Flask API Endpoint (5-10 minutes)
+### Flask side
 
-**File:** `app.py` on your Flask server
+The server must expose `/api/flare-status`, returning JSON like:
 
-Add the `/api/flare-status` endpoint. See `flask_flare_status_endpoint.py` in this repo for the complete implementation. Key points:
-
-- Reuse your existing forecast/scoring logic
-- Return JSON with: score, predicted_flare, score_delta, factors, doses_due
-- Use same Bearer token auth as `/api/health-sync`
-- Handle insufficient data gracefully
-
-**Test it works:**
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "https://<YOUR_SERVER>/api/flare-status?user_id=1"
-```
-
-Should return JSON like:
 ```json
 {
   "ok": true,
@@ -34,26 +32,31 @@ Should return JSON like:
 }
 ```
 
-### 2. Configure Xcode Project (10-15 minutes)
+Auth uses the same Bearer token as `/api/health-sync`. Smoke test:
 
-**Follow the checklist in `XCODE_SETUP.md`**, specifically:
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  "https://<YOUR_SERVER>/api/flare-status?user_id=1"
+```
 
-#### A. Info.plist Keys
-Add these in Xcode → Target → Info tab:
+### Xcode
+
+Full checklist lives in `XCODE_SETUP.md`. Minimum config:
+
+**Info.plist keys** (Target → Info)
 
 | Key | Value |
 |-----|-------|
-| `BGTaskSchedulerPermittedIdentifiers` | Array with one item: `com.biotracking.healthsync.daily` |
-| `NSHealthShareUsageDescription` | "Biotracker needs access to your health data to sync steps, heart rate, HRV, sleep temperature, and sun exposure to your personal health tracker." |
+| `BGTaskSchedulerPermittedIdentifiers` | array containing `com.biotracking.healthsync.daily` |
+| `NSHealthShareUsageDescription` | description of why HealthKit access is needed |
 
-#### B. Capabilities
-Enable in Xcode → Target → Signing & Capabilities:
+**Capabilities** (Target → Signing & Capabilities)
 
-- **HealthKit** (with Background Delivery ON)
-- **Background Modes** (check "Background processing" only)
+- HealthKit, with Background Delivery on
+- Background Modes, "Background processing" only
 
-#### C. Verify Entitlements
-File `healthsync.entitlements` should have:
+**Entitlements** (`healthsync.entitlements`)
+
 ```xml
 <key>com.apple.developer.healthkit</key>
 <true/>
@@ -61,167 +64,72 @@ File `healthsync.entitlements` should have:
 <true/>
 ```
 
-### 3. Build and Test (30-60 minutes)
+### First run
 
-**Quick smoke test:**
-1. Run app on your iPhone from Xcode (Cmd+R)
-2. Go to Sync tab
-3. Tap "Authorize HealthKit" → grant permissions
-4. Fill in:
+1. Build to a real iPhone. HealthKit does not work in the Simulator.
+2. Sync tab → Authorize HealthKit → grant permissions.
+3. Fill in the settings:
    - Server URL: `https://<YOUR_SERVER>/api/health-sync`
-   - API Token: (your token from Flask config)
+   - API Token: from Flask config
    - User ID: `1`
-5. Tap "Sync Health Data" button
-6. Verify: "synced X fields: steps, hrv, ..." appears
-7. Switch to Log tab → should load biotracker log page
-8. Switch to Risk tab → should load biotracker forecast page
+4. Tap Sync Health Data. Expect a status line like `synced 9 fields: steps, hrv, ...`.
+5. Log tab loads the biotracker log page. Risk tab loads the forecast page.
 
-**If that works, you're 99% there!** 🎉
+For the full test matrix (notifications, background sync, Shortcuts), see `TESTING_GUIDE.md`.
 
-For comprehensive testing (notifications, background sync, etc.), see `TESTING_GUIDE.md`.
+## Troubleshooting
 
----
+### HealthKit not authorized
 
-## Troubleshooting First Run
+- Must be a real iPhone, not the Simulator
+- Health app → Sharing → Apps → healthsync should list permissions
+- Info.plist must include `NSHealthShareUsageDescription`
 
-### "HealthKit not authorized"
-- Make sure you're running on a **real iPhone** (not Simulator)
-- Check Health app → Sharing → Apps → healthsync shows permissions
-- Verify Info.plist has `NSHealthShareUsageDescription`
+### Sync fails with a network error
 
-### "Sync failed — network error"
-- Check Tailscale is connected on iPhone
-- Verify server URL has no typos
-- Test in Safari first: open `https://<YOUR_SERVER>` manually
+- Check Tailscale is connected on the iPhone
+- Open `https://<YOUR_SERVER>` in Safari to confirm reachability
+- Confirm the Flask server is running
 
-### Web views show blank page
-- Same as above — Tailscale issue
-- Try disconnecting/reconnecting Tailscale
-- Check Flask server is running
+### Web views show a blank page
+
+- Same Tailscale check as above
+- Try disconnecting and reconnecting Tailscale
 
 ### No notifications
-- Settings → Notifications → healthsync → Allow Notifications (must be ON)
-- First launch prompts for permission — if dismissed, need to enable manually
-- Tap "Enable Notifications" toggle in app settings to re-prompt
 
-### Background sync doesn't work
-- This is normal for first build from Xcode — background tasks work better in TestFlight/production
-- To test immediately, use the Xcode debug command (see TESTING_GUIDE.md)
-- Check Settings → General → Background App Refresh → healthsync (ON)
+- Settings → Notifications → healthsync → Allow Notifications must be on
+- If the first-launch prompt was dismissed, re-enable via the in-app toggle
 
----
+### Background sync stays silent
 
-## File Reference
+- `BGTaskScheduler` is unreliable from Xcode debug builds; behavior is more consistent in TestFlight or production
+- Settings → General → Background App Refresh → healthsync must be on
+- `TESTING_GUIDE.md` documents the Xcode debug command to force a run
 
-Your repo now has these documentation files:
+## File reference
+
+Swift sources:
 
 | File | Purpose |
 |------|---------|
-| `ARCHITECTURE.md` | Complete system design, data flows, component details |
-| `XCODE_SETUP.md` | Xcode project configuration checklist |
-| `TESTING_GUIDE.md` | Comprehensive testing procedures |
-| `flask_flare_status_endpoint.py` | Server-side API implementation guide |
-| `Info.plist.reference` | Example Info.plist keys |
-| `README.md` | (this file) Quick start guide |
-
-**Plus your Swift code:**
-
-| File | What It Does |
-|------|--------------|
 | `healthsyncApp.swift` | App entry point, registers background tasks |
-| `ContentView.swift` | Main TabView (3 tabs) |
-| `SyncSettingsView.swift` | Settings + manual sync UI |
+| `ContentView.swift` | Main TabView |
+| `SyncSettingsView.swift` | Settings and manual sync UI |
 | `BioTrackerWebView.swift` | WKWebView wrapper for mobile pages |
-| `HealthSyncer.swift` | HealthKit queries + network sync |
-| `BackgroundSyncTask.swift` | Automated daily sync via BGTaskScheduler |
-| `FlareChecker.swift` | Fetches /api/flare-status, evaluates alerts |
-| `NotificationManager.swift` | Schedules all 4 notification types |
+| `HealthSyncer.swift` | HealthKit queries and network sync |
+| `BackgroundSyncTask.swift` | Daily sync via `BGTaskScheduler` |
+| `FlareChecker.swift` | Polls `/api/flare-status`, evaluates alerts |
+| `NotificationManager.swift` | Schedules notifications |
 | `ShortcutIntents.swift` | iOS Shortcuts actions |
 
----
+Docs:
 
-## Next Steps After Testing
-
-Once everything works:
-
-1. **Use it daily for a week** — verify background sync, notifications, reliability
-2. **Monitor battery usage** — Settings → Battery → healthsync (should be <5% per day)
-3. **Create Shortcuts automations** if desired:
-   - "Every day at 9 PM → Open Biotracker Log"
-   - "When leaving gym → Sync Biotracker"
-4. **Optional: TestFlight** — if you want to test background tasks more reliably
-5. **Iterate** — adjust notification times, thresholds based on real usage
-
----
-
-## What Works Right Now
-
-Even without the Flask endpoint and with minimal Xcode config, these features already work:
-
-✅ Manual HealthKit sync  
-✅ Web view access to biotracker  
-✅ Settings persistence  
-✅ Historical backfill  
-✅ HealthKit authorization  
-
-**What needs Flask endpoint:**
-- Flare alerts (threshold + trend)
-- Med dose reminders (requires doses_due in API response)
-
-**What needs background processing capability:**
-- Automatic evening sync (needs Info.plist + capability)
-- Scheduled notifications (works once background sync works)
-
----
-
-## Support
-
-If you hit issues:
-
-1. **Check documentation:**
-   - `TESTING_GUIDE.md` for specific test procedures
-   - `XCODE_SETUP.md` for configuration help
-   - `ARCHITECTURE.md` for how everything fits together
-
-2. **Xcode console logs:**
-   - Run from Xcode, watch console for error messages
-   - Most issues print helpful error text
-
-3. **Verify Flask side:**
-   - Check server logs when sync happens
-   - Test API endpoints with curl
-
-4. **iOS Settings:**
-   - Settings → healthsync → check all permissions
-   - Settings → General → Background App Refresh
-   - Settings → Notifications → healthsync
-
----
-
-## Estimated Time to Completion
-
-- **Add Flask endpoint:** 5-10 min
-- **Configure Xcode:** 10-15 min
-- **First successful sync:** 5 min
-- **Test all features:** 30-60 min
-- **Total:** 1-2 hours to fully working app
-
----
-
-## Success Criteria
-
-You'll know everything works when:
-
-✅ Manual sync shows "synced 9 fields: steps, hrv, ..."  
-✅ Log and Risk tabs load biotracker pages  
-✅ Notification permission granted  
-✅ Background sync runs overnight (check "Last auto-sync" timestamp)  
-✅ Flare alerts appear when conditions met  
-✅ Shortcuts appear in Shortcuts app  
-✅ No crashes in normal usage  
-
----
-
-**You're almost there!** The hard work is done — just need to wire up the server endpoint and verify Xcode config. 🚀
-
-**Questions?** All the details are in the other documentation files. Happy tracking! 📊💙
+| File | Purpose |
+|------|---------|
+| `ARCHITECTURE.md` | System design and data flows |
+| `XCODE_SETUP.md` | Xcode configuration checklist |
+| `TESTING_GUIDE.md` | Test procedures |
+| `NOTIFICATIONS.md` | Notification design and timing |
+| `STATUS.md` | Implementation status |
+| `Info.plist.reference` | Example Info.plist keys |
