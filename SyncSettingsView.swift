@@ -20,8 +20,44 @@ struct SyncSettingsView: View {
     @AppStorage("bedtimeReminderHour") private var bedtimeReminderHour = 21
     @AppStorage("bedtimeReminderMinute") private var bedtimeReminderMinute = 0
     @AppStorage("syncHour") private var syncHour = 20
+    @AppStorage("syncMinute") private var syncMinute = 0
     @AppStorage("flareScoreTrendThreshold") private var flareScoreTrendThreshold = 3.0
     @AppStorage("lastSyncTimestamp") private var lastSyncTimestamp = ""
+
+    /// Two-way binding between the `bedtimeReminderHour`/`bedtimeReminderMinute`
+    /// AppStorage ints and a `Date`, so SwiftUI's DatePicker can drive them.
+    private var bedtimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var comps = DateComponents()
+                comps.hour = bedtimeReminderHour
+                comps.minute = bedtimeReminderMinute
+                return Calendar.current.date(from: comps) ?? Date()
+            },
+            set: { newDate in
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                bedtimeReminderHour = comps.hour ?? 21
+                bedtimeReminderMinute = comps.minute ?? 0
+            }
+        )
+    }
+
+    /// Same thing for the daily auto-sync target time.
+    private var syncTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var comps = DateComponents()
+                comps.hour = syncHour
+                comps.minute = syncMinute
+                return Calendar.current.date(from: comps) ?? Date()
+            },
+            set: { newDate in
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                syncHour = comps.hour ?? 20
+                syncMinute = comps.minute ?? 0
+            }
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -105,27 +141,17 @@ struct SyncSettingsView: View {
                         }
 
                     if notificationsEnabled {
-                        HStack {
-                            Text("Bedtime Reminder")
-                            Spacer()
-                            Picker("Hour", selection: $bedtimeReminderHour) {
-                                ForEach(18..<24, id: \.self) { h in
-                                    Text("\(h):00").tag(h)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                        }
+                        DatePicker(
+                            "Bedtime Reminder",
+                            selection: bedtimeBinding,
+                            displayedComponents: .hourAndMinute
+                        )
 
-                        HStack {
-                            Text("Auto-Sync Target")
-                            Spacer()
-                            Picker("Hour", selection: $syncHour) {
-                                ForEach(17..<23, id: \.self) { h in
-                                    Text("\(h):00").tag(h)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                        }
+                        DatePicker(
+                            "Auto-Sync Target",
+                            selection: syncTimeBinding,
+                            displayedComponents: .hourAndMinute
+                        )
 
                         HStack {
                             Text("Trend Alert Threshold")
@@ -137,7 +163,7 @@ struct SyncSettingsView: View {
                         }
                     }
                 }
-
+                
                 // Automatic Background Sync
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
@@ -145,26 +171,26 @@ struct SyncSettingsView: View {
                             Image(systemName: "clock.arrow.circlepath")
                                 .font(.title2)
                                 .foregroundStyle(.blue)
-
+                            
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Automatic Sync")
                                     .font(.headline)
-
-                                Text("Daily at \(syncHour > 0 ? syncHour : 20):00")
+                                
+                                Text("Daily at \(formattedSyncTarget)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-
+                            
                             Spacer()
-
+                            
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
                                 .font(.title3)
                         }
-
+                        
                         if !lastSyncTimestamp.isEmpty {
                             Divider()
-
+                            
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Last Auto-Sync")
@@ -174,17 +200,17 @@ struct SyncSettingsView: View {
                                         .font(.subheadline)
                                         .foregroundStyle(.primary)
                                 }
-
+                                
                                 Spacer()
-
+                                
                                 Text(nextSyncTime)
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
                             }
                         }
-
+                        
                         Divider()
-
+                        
                         // Debug buttons
                         HStack(spacing: 12) {
                             Button(action: {
@@ -195,7 +221,7 @@ struct SyncSettingsView: View {
                             }
                             .buttonStyle(.bordered)
                             .disabled(syncer.isSyncing || apiToken.isEmpty)
-
+                            
                             Button(action: {
                                 BackgroundSyncTask.scheduleNext()
                             }) {
@@ -303,20 +329,20 @@ struct SyncSettingsView: View {
             }
         }
     }
-
+    
     /// Format the timestamp to a human-readable relative time
     private var formattedSyncTime: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         formatter.timeZone = .current
-
+        
         guard let date = formatter.date(from: lastSyncTimestamp) else {
             return lastSyncTimestamp
         }
-
+        
         let now = Date()
         let interval = now.timeIntervalSince(date)
-
+        
         if interval < 60 {
             return "just now"
         } else if interval < 3600 {
@@ -330,26 +356,31 @@ struct SyncSettingsView: View {
             return "\(days) day\(days == 1 ? "" : "s") ago"
         }
     }
+    
+    /// "HH:mm" version of the auto-sync target, for display under the
+    /// "Automatic Sync" header.
+    private var formattedSyncTarget: String {
+        String(format: "%02d:%02d", syncHour, syncMinute)
+    }
 
     /// Calculate the next scheduled sync time
     private var nextSyncTime: String {
-        let targetHour = syncHour > 0 ? syncHour : 20
         let calendar = Calendar.current
         var components = calendar.dateComponents([.year, .month, .day], from: Date())
-        components.hour = targetHour
-        components.minute = 0
+        components.hour = syncHour
+        components.minute = syncMinute
 
         guard var target = calendar.date(from: components) else {
             return "Next: Unknown"
         }
-
+        
         // If target is in the past, schedule for tomorrow
         if target < Date() {
             target = calendar.date(byAdding: .day, value: 1, to: target)!
         }
-
+        
         let interval = target.timeIntervalSinceNow
-
+        
         if interval < 3600 {
             let minutes = Int(interval / 60)
             return "Next: in \(minutes)m"
@@ -360,23 +391,39 @@ struct SyncSettingsView: View {
             return "Next: tomorrow"
         }
     }
-
+    
     /// Test the background sync flow manually
     private func testBackgroundSync() {
         print("🧪 Testing background sync manually")
 
+        DispatchQueue.main.async {
+            syncer.isSyncing = true
+            syncer.lastResult = "test sync: running…"
+        }
+
         syncer.syncNowSilent(serverURL: serverURL, apiToken: apiToken, userID: userID) { healthSyncSuccess in
             print(healthSyncSuccess ? "✅ Health data synced" : "❌ Health sync failed")
 
-            FlareChecker.shared.fetchStatus(serverURL: serverURL, apiToken: apiToken, userID: userID) { flareStatus in
-                if let status = flareStatus {
-                    print("✅ Flare status fetched: score \(status.score ?? 0)")
-
-                    // Update timestamp in the same format as BackgroundSyncTask
+            // Update visible UI feedback immediately on the main thread, regardless
+            // of whether the downstream flare-status call succeeds. Previously the
+            // timestamp only updated inside the flare callback, so if the flare
+            // fetch failed the user saw no confirmation that sync had worked.
+            DispatchQueue.main.async {
+                syncer.isSyncing = false
+                if healthSyncSuccess {
+                    syncer.lastResult = "test sync: ✅ uploaded to server"
                     let f = DateFormatter()
                     f.dateFormat = "yyyy-MM-dd HH:mm"
                     f.timeZone = .current
                     lastSyncTimestamp = f.string(from: Date())
+                } else {
+                    syncer.lastResult = "test sync: ❌ upload failed (check server URL / token)"
+                }
+            }
+
+            FlareChecker.shared.fetchStatus(serverURL: serverURL, apiToken: apiToken, userID: userID) { flareStatus in
+                if let status = flareStatus {
+                    print("✅ Flare status fetched: score \(status.score ?? 0)")
                 } else {
                     print("❌ Failed to fetch flare status")
                 }

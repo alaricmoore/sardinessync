@@ -11,6 +11,9 @@ import WebKit
 struct BioTrackerWebView: View {
     let baseURL: String
     let path: String
+    /// Called when the webview tries to navigate to the native sync bridge URL
+    /// (`/ios/sync-healthkit`). Navigation is cancelled and this closure runs instead.
+    var onSyncTrigger: (() -> Void)? = nil
 
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -35,10 +38,11 @@ struct BioTrackerWebView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 .padding()
-            } else {
+            } else if let url = URL(string: baseURL + path) {
                 WebViewRepresentable(
-                    url: URL(string: baseURL + path)!,
+                    url: url,
                     baseHost: URL(string: baseURL)?.host ?? "",
+                    onSyncTrigger: onSyncTrigger,
                     isLoading: $isLoading,
                     errorMessage: $errorMessage
                 )
@@ -47,6 +51,19 @@ struct BioTrackerWebView: View {
                 if isLoading {
                     ProgressView("Loading...")
                 }
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+                    Text("Server URL not configured")
+                        .font(.headline)
+                    Text("Tap the gear icon to enter your server address.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
             }
         }
     }
@@ -57,6 +74,7 @@ struct BioTrackerWebView: View {
 struct WebViewRepresentable: UIViewRepresentable {
     let url: URL
     let baseHost: String
+    var onSyncTrigger: (() -> Void)?
     @Binding var isLoading: Bool
     @Binding var errorMessage: String?
 
@@ -71,7 +89,16 @@ struct WebViewRepresentable: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
-        webView.load(URLRequest(url: url))
+
+        // Append a token to the User-Agent so the web app can detect that
+        // it's being rendered inside the iOS shell (used to conditionally
+        // render the native "Sync" nav entry that hits /ios/sync-healthkit).
+        webView.evaluateJavaScript("navigator.userAgent") { ua, _ in
+            if let ua = ua as? String {
+                webView.customUserAgent = ua + " HealthSynciOS/1.0"
+            }
+            webView.load(URLRequest(url: self.url))
+        }
         return webView
     }
 
@@ -117,6 +144,17 @@ struct WebViewRepresentable: UIViewRepresentable {
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url else {
                 decisionHandler(.allow)
+                return
+            }
+
+            // Native sync bridge: the web app links to /ios/sync-healthkit in its
+            // nav bar; we intercept it, cancel navigation, and run native HealthKit
+            // sync instead. The URL never actually hits the server.
+            if url.path == "/ios/sync-healthkit" {
+                DispatchQueue.main.async { [weak self] in
+                    self?.parent.onSyncTrigger?()
+                }
+                decisionHandler(.cancel)
                 return
             }
 

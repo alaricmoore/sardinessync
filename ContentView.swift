@@ -14,24 +14,48 @@ struct ContentView: View {
     @AppStorage("apiToken") private var apiToken = ""
     @AppStorage("userID") private var userID = 1
 
-    @State private var selectedTab = 0
+    @State private var showSettings = false
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            SyncSettingsView(syncer: syncer, serverURL: $serverURL, apiToken: $apiToken, userID: $userID)
-                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
-                .tag(0)
-
-            BioTrackerWebView(baseURL: baseURL, path: "/mobile/log")
-                .tabItem { Label("Log", systemImage: "square.and.pencil") }
-                .tag(1)
-
-            BioTrackerWebView(baseURL: baseURL, path: "/mobile/status")
-                .tabItem { Label("Risk", systemImage: "heart.text.square") }
-                .tag(2)
+        BioTrackerWebView(
+            baseURL: baseURL,
+            path: "/",
+            onSyncTrigger: {
+                syncer.syncNow(serverURL: serverURL, apiToken: apiToken, userID: userID)
+            }
+        )
+        .overlay(alignment: .topTrailing) {
+            // .overlay + explicit frame ensures SwiftUI routes touches
+            // over the WKWebView to this button. 44x44 is the Apple HIG
+            // minimum hit area so taps land reliably on a phone screen.
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(.black.opacity(0.55)))
+            }
+            .contentShape(Circle())
+            .padding(.top, 4)
+            .padding(.trailing, 8)
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SyncSettingsView(syncer: syncer, serverURL: $serverURL, apiToken: $apiToken, userID: $userID)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showSettings = false }
+                        }
+                    }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openLogTab)) { _ in
-            selectedTab = 1
+            // Log tab no longer exists; the web view owns navigation.
+            // Just make sure the settings sheet is dismissed so any deep-link
+            // lands on the web app.
+            showSettings = false
         }
     }
 

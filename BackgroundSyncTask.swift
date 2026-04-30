@@ -24,13 +24,16 @@ enum BackgroundSyncTask {
 
     /// Schedule the next background sync around the configured hour.
     static func scheduleNext() {
-        let syncHour = UserDefaults.standard.integer(forKey: "syncHour")
-        let targetHour = syncHour > 0 ? syncHour : 20
+        // Defaults are registered in HealthSyncApp.init(), so these return
+        // the real stored values (including 0 = midnight) rather than falling
+        // back to 0 for unset keys.
+        let targetHour = UserDefaults.standard.integer(forKey: "syncHour")
+        let targetMinute = UserDefaults.standard.integer(forKey: "syncMinute")
 
         let calendar = Calendar.current
         var components = calendar.dateComponents([.year, .month, .day], from: Date())
         components.hour = targetHour
-        components.minute = 0
+        components.minute = targetMinute
 
         guard let target = calendar.date(from: components) else { return }
         let earliestDate = target < Date() ? target.addingTimeInterval(86400) : target
@@ -43,7 +46,7 @@ enum BackgroundSyncTask {
     /// Handle the background task execution.
     static func handle(task: BGAppRefreshTask) {
         print("🔄 Background sync task started")
-
+        
         // Schedule next run immediately so it's always queued
         scheduleNext()
         print("📅 Next sync scheduled")
@@ -57,7 +60,7 @@ enum BackgroundSyncTask {
             task.setTaskCompleted(success: false)
             return
         }
-
+        
         print("✅ Configuration OK, starting sync")
 
         // Set expiration handler
@@ -100,11 +103,11 @@ enum BackgroundSyncTask {
 
                 // Step 5: Schedule bedtime reminder
                 if notificationsEnabled {
+                    // Defaults registered in HealthSyncApp.init() — no > 0 guard
+                    // needed, so midnight (0) is a legal bedtime selection.
                     let hour = UserDefaults.standard.integer(forKey: "bedtimeReminderHour")
                     let minute = UserDefaults.standard.integer(forKey: "bedtimeReminderMinute")
-                    NotificationManager.shared.scheduleBedtimeReminder(
-                        hour: hour > 0 ? hour : 21, minute: minute
-                    )
+                    NotificationManager.shared.scheduleBedtimeReminder(hour: hour, minute: minute)
                 }
 
                 // Step 6: Record sync timestamp
