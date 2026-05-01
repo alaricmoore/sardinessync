@@ -449,7 +449,7 @@ None.
 
 ## License
 
-Personal project, all rights reserved. Code is for Alaric's personal biotracker system and is not open source.
+Personal project, no rights reserved. Code is for Alaric's personal health tracker system and is free to copy and use or whatever. 
 
 ---
 
