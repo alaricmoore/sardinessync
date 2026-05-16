@@ -8,10 +8,19 @@
 //  the UUIDs below. Flow per sync session:
 //
 //    1. Scan for the service UUID, connect to the first UVW-* peripheral
-//    2. Read STATUS (16B): boot_id, log_size, sync_pos, device_ms
-//    3. Loop: read CHUNK → POST to /api/uv/ingest with same headers a
+//    2. Write the wearable token to AUTH. CoreBluetooth raises the iOS
+//       Just-Works pairing prompt on first encrypted access; the write
+//       completes only once the bond is established and the firmware
+//       has accepted the token. From this point the link is encrypted.
+//    3. Read STATUS (16B): boot_id, log_size, sync_pos, device_ms
+//    4. Loop: read CHUNK → POST to /api/uv/ingest with same headers a
 //       WiFi-direct sync would use → write ACK with the new cursor
-//    4. Disconnect
+//    5. Disconnect
+//
+//  A token mismatch does NOT fail the AUTH write — the firmware just
+//  leaves g_authed=false and the next CHUNK read returns empty. We
+//  detect that as "first chunk empty but logSize > syncPos" → auth
+//  rejected; see the drain loop below.
 //
 //  CoreBluetooth's delegate callbacks are bridged to async/await with
 //  one-at-a-time continuations stored on the class. Safe because the sync
@@ -29,6 +38,7 @@ final class BLEWearableSyncer: NSObject, ObservableObject {
     static let statusUUID  = CBUUID(string: "4427d05e-3b7b-40b4-9920-925d9902f161")
     static let chunkUUID   = CBUUID(string: "c33d16e5-f660-4b38-ae13-6b47d8e08534")
     static let ackUUID     = CBUUID(string: "dac3d6a1-1cf1-468c-9bf1-9f45d04c6d9d")
+    static let authUUID    = CBUUID(string: "6f1d8e23-9a4f-4a1c-bc18-3e9d52c7f4ab")
 
     // MARK: - Published state for the UI
     @Published var statusMessage = ""
@@ -100,8 +110,19 @@ final class BLEWearableSyncer: NSObject, ObservableObject {
 
         guard let statusChar = chars[Self.statusUUID],
               let chunkChar  = chars[Self.chunkUUID],
-              let ackChar    = chars[Self.ackUUID]
+              let ackChar    = chars[Self.ackUUID],
+              let authChar   = chars[Self.authUUID]
         else { throw BLEError.missingChar }
+
+        // AUTH first. This is the write that triggers Just-Works pairing on
+        // first contact, so it may take a second or two while iOS shows the
+        // pairing prompt. After the bond exists, subsequent connections skip
+        // the prompt and this write returns immediately.
+        guard let tokenData = bearerToken.data(using: .utf8) else {
+            throw BLEError.missingToken
+        }
+        statusMessage = "Authenticating (may show pairing prompt)..."
+        try await write(p, characteristic: authChar, value: tokenData)
 
         statusMessage = "Reading status..."
         let statusData = try await read(p, characteristic: statusChar)
@@ -109,13 +130,20 @@ final class BLEWearableSyncer: NSObject, ObservableObject {
         bytesPending = (s.logSize > s.syncPos) ? (s.logSize - s.syncPos) : 0
         statusMessage = "\(bytesPending) B pending"
 
-        // Drain loop. Empty CHUNK read = device is at EOF.
+        // Drain loop. Empty CHUNK read = device is at EOF. But an empty FIRST
+        // chunk when STATUS said there's pending data means the firmware's
+        // g_authed flag is false — i.e. the token we wrote didn't match.
         var cursor = s.syncPos
         var total: UInt32 = 0
         var chunkIdx = 0
         while true {
             let chunk = try await read(p, characteristic: chunkChar)
-            if chunk.isEmpty { break }
+            if chunk.isEmpty {
+                if chunkIdx == 0 && s.logSize > s.syncPos {
+                    throw BLEError.authRejected
+                }
+                break
+            }
 
             try await upload(
                 chunk,
@@ -335,7 +363,7 @@ extension BLEWearableSyncer: CBPeripheralDelegate {
                 return
             }
             peripheral.discoverCharacteristics(
-                [Self.statusUUID, Self.chunkUUID, Self.ackUUID], for: svc
+                [Self.statusUUID, Self.chunkUUID, Self.ackUUID, Self.authUUID], for: svc
             )
         }
     }
@@ -400,6 +428,7 @@ enum BLEError: LocalizedError {
     case missingService
     case missingChar
     case missingToken
+    case authRejected
     case badURL
     case uploadFailed(Int)
 
@@ -413,6 +442,7 @@ enum BLEError: LocalizedError {
         case .missingService:    return "Wearable found but advertised the wrong service. Firmware/UUID mismatch?"
         case .missingChar:       return "Wearable missing expected characteristics. Firmware/UUID mismatch?"
         case .missingToken:      return "Wearable API token is empty. Set it in the Wearable tab."
+        case .authRejected:      return "Wearable rejected the token. Check that the value in Settings matches wearable_token in the Pi's config.json."
         case .badURL:            return "Server URL is malformed."
         case .uploadFailed(let code): return "Server rejected chunk (HTTP \(code))."
         }
