@@ -83,6 +83,14 @@ struct SyncSettingsView: View {
                     }
                 }
 
+                Section("Wearable") {
+                    NavigationLink {
+                        BLEWearableSyncView()
+                    } label: {
+                        Label("Sync UV Wearable", systemImage: "antenna.radiowaves.left.and.right")
+                    }
+                }
+
                 // Custom visual sync section with logo
                 Section {
                     Button(action: {
