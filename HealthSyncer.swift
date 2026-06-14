@@ -255,29 +255,29 @@ class HealthSyncer: ObservableObject {
                 return
             }
 
-            // Collect per-series timestamps, then derive IBIs within each series
-            // to avoid mixing cumulative timestamps across unrelated series.
-            let seriesQueue = DispatchQueue(label: "rmssd.collect")
-            var allIBIs: [Double] = []
+            // RMSSD is a short-term measure and is hyper-sensitive to single-beat
+            // artifacts: a missed or ectopic beat squares straight into the sum.
+            // So we compute RMSSD *within* each HeartbeatSeries (never across series
+            // boundaries — those successive differences are meaningless) and take
+            // the MEDIAN of the per-series values across the night, which is robust
+            // to any series that is still noisy. Gap, physiological-range, and
+            // Malik 20% ectopic filtering happen per series in seriesRMSSD().
+            let collectQueue = DispatchQueue(label: "rmssd.collect")
+            var seriesRMSSDs: [Double] = []
             let rrGroup = DispatchGroup()
 
             for sample in series {
                 rrGroup.enter()
-                var timestamps: [Double] = []
+                // (timeSinceStart in ms, precededByGap) for every beat in the series.
+                var beats: [(t: Double, gap: Bool)] = []
                 let rrQuery = HKHeartbeatSeriesQuery(heartbeatSeries: sample) { _, timeSinceStart, precededByGap, done, error in
-                    if error == nil && !precededByGap {
-                        timestamps.append(timeSinceStart * 1000.0) // convert to ms
+                    if error == nil {
+                        beats.append((timeSinceStart * 1000.0, precededByGap)) // ms
                     }
                     if done {
-                        // Compute IBIs within this single series
-                        var seriesIBIs: [Double] = []
-                        for i in 1..<timestamps.count {
-                            let ibi = timestamps[i] - timestamps[i - 1]
-                            if ibi > 200 && ibi < 2000 { // filter physiological range
-                                seriesIBIs.append(ibi)
-                            }
+                        if let r = HealthSyncer.seriesRMSSD(beats: beats) {
+                            collectQueue.sync { seriesRMSSDs.append(r) }
                         }
-                        seriesQueue.sync { allIBIs.append(contentsOf: seriesIBIs) }
                         rrGroup.leave()
                     }
                 }
@@ -285,18 +285,49 @@ class HealthSyncer: ObservableObject {
             }
 
             rrGroup.notify(queue: .global()) {
-                guard allIBIs.count >= 2 else { completion(nil); return }
-
-                var sumSq: Double = 0
-                for i in 1..<allIBIs.count {
-                    let diff = allIBIs[i] - allIBIs[i - 1]
-                    sumSq += diff * diff
-                }
-                let rmssd = sqrt(sumSq / Double(allIBIs.count - 1))
-                completion((rmssd * 100).rounded() / 100) // round to 2 decimal places
+                guard let med = HealthSyncer.median(seriesRMSSDs) else { completion(nil); return }
+                completion((med * 100).rounded() / 100) // round to 2 decimal places
             }
         }
         store.execute(query)
+    }
+
+    /// RMSSD within a single HeartbeatSeries. Drops intervals that span a gap
+    /// (precededByGap = missed beats), fall outside the 200-2000 ms physiological
+    /// window, or differ >20% from the previous accepted interval (Malik filter,
+    /// which rejects ectopic beats). A rejected interval breaks the run so the
+    /// artifact is never counted in a successive difference. Returns nil if fewer
+    /// than 4 clean successive differences remain.
+    static func seriesRMSSD(beats: [(t: Double, gap: Bool)]) -> Double? {
+        guard beats.count >= 2 else { return nil }
+        var sumSq = 0.0
+        var nDiff = 0
+        var prevIBI: Double? = nil   // last ACCEPTED interval; nil = run broken
+        for i in 1..<beats.count {
+            if beats[i].gap { prevIBI = nil; continue }       // interval spans missed beats
+            let ibi = beats[i].t - beats[i - 1].t
+            if ibi <= 200 || ibi >= 2000 { prevIBI = nil; continue }  // absolute filter
+            if let p = prevIBI {
+                if abs(ibi - p) / p > 0.20 {                  // Malik: ectopic/artifact
+                    prevIBI = nil
+                    continue
+                }
+                let d = ibi - p
+                sumSq += d * d
+                nDiff += 1
+            }
+            prevIBI = ibi
+        }
+        guard nDiff >= 4 else { return nil }   // too few clean diffs for a stable value
+        return (sumSq / Double(nDiff)).squareRoot()
+    }
+
+    /// Median of a list of doubles, or nil if empty.
+    static func median(_ xs: [Double]) -> Double? {
+        guard !xs.isEmpty else { return nil }
+        let s = xs.sorted()
+        let n = s.count
+        return n % 2 == 1 ? s[n / 2] : (s[n / 2 - 1] + s[n / 2]) / 2.0
     }
 
     // MARK: - Backfill
