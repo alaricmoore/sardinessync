@@ -83,14 +83,16 @@ class HealthSyncer: ObservableObject {
 
         // Resting heart rate — most recent
         group.enter()
-        queryMostRecent(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute())) { val in
+        queryMostRecentInRange(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()),
+                               start: today, end: tomorrow) { val in
             if let v = val { payload["resting_heart_rate"] = v }
             group.leave()
         }
 
         // Body temperature (BBT delta) — most recent
         group.enter()
-        queryMostRecent(.bodyTemperature, unit: .degreeFahrenheit()) { val in
+        queryMostRecentInRange(.bodyTemperature, unit: .degreeFahrenheit(),
+                               start: today, end: tomorrow) { val in
             // Apple stores absolute temp; biotracker wants delta from baseline
             // The iOS app sends the raw value; server could subtract baseline,
             // but for now we send as-is (same as what Shortcuts was doing)
@@ -100,14 +102,16 @@ class HealthSyncer: ObservableObject {
 
         // SpO2 — most recent
         group.enter()
-        queryMostRecent(.oxygenSaturation, unit: .percent()) { val in
+        queryMostRecentInRange(.oxygenSaturation, unit: .percent(),
+                               start: today, end: tomorrow) { val in
             if let v = val { payload["spo2"] = v * 100.0 } // HealthKit returns 0-1, we want %
             group.leave()
         }
 
         // Respiratory rate — most recent
         group.enter()
-        queryMostRecent(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute())) { val in
+        queryMostRecentInRange(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()),
+                               start: today, end: tomorrow) { val in
             if let v = val { payload["respiratory_rate"] = v }
             group.leave()
         }
@@ -160,28 +164,32 @@ class HealthSyncer: ObservableObject {
 
         // Resting heart rate — most recent
         group.enter()
-        queryMostRecent(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute())) { val in
+        queryMostRecentInRange(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()),
+                               start: today, end: tomorrow) { val in
             if let v = val { payload["resting_heart_rate"] = v }
             group.leave()
         }
 
         // Body temperature (BBT delta) — most recent
         group.enter()
-        queryMostRecent(.bodyTemperature, unit: .degreeFahrenheit()) { val in
+        queryMostRecentInRange(.bodyTemperature, unit: .degreeFahrenheit(),
+                               start: today, end: tomorrow) { val in
             if let v = val { payload["basal_temp_delta"] = v }
             group.leave()
         }
 
         // SpO2 — most recent
         group.enter()
-        queryMostRecent(.oxygenSaturation, unit: .percent()) { val in
+        queryMostRecentInRange(.oxygenSaturation, unit: .percent(),
+                               start: today, end: tomorrow) { val in
             if let v = val { payload["spo2"] = v * 100.0 }
             group.leave()
         }
 
         // Respiratory rate — most recent
         group.enter()
-        queryMostRecent(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute())) { val in
+        queryMostRecentInRange(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()),
+                               start: today, end: tomorrow) { val in
             if let v = val { payload["respiratory_rate"] = v }
             group.leave()
         }
@@ -216,18 +224,6 @@ class HealthSyncer: ObservableObject {
         let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate,
                                        options: .cumulativeSum) { _, stats, _ in
             let val = stats?.sumQuantity()?.doubleValue(for: unit)
-            completion(val)
-        }
-        store.execute(query)
-    }
-
-    private func queryMostRecent(_ typeID: HKQuantityTypeIdentifier, unit: HKUnit,
-                                  completion: @escaping (Double?) -> Void) {
-        let type = HKQuantityType(typeID)
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: type, predicate: nil,
-                                   limit: 1, sortDescriptors: [sort]) { _, samples, _ in
-            let val = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
             completion(val)
         }
         store.execute(query)
