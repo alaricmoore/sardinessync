@@ -1,0 +1,4 @@
+version: 1
+bundleID: com.biotracking.healthsync
+infoPath: Info.plist
+entitlementsPath: healthsync.entitlements

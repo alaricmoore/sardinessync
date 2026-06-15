@@ -12,5 +12,7 @@
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Connects to the UV wearable to relay sample data when WiFi isn't available.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>This is for syncing with the flask server that does the autoimmune flare forecasting stuff.</string>
 </dict>
 </plist>
