@@ -74,9 +74,9 @@ class HealthSyncer: ObservableObject {
             group.leave()
         }
 
-        // HRV (SDNN) — most recent
+        // HRV (SDNN) — median of today's samples
         group.enter()
-        queryMostRecent(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) { val in
+        queryDailySDNN(start: today, end: tomorrow) { val in
             if let v = val { payload["hrv"] = v }
             group.leave()
         }
@@ -151,9 +151,9 @@ class HealthSyncer: ObservableObject {
             group.leave()
         }
 
-        // HRV (SDNN) — most recent
+        // HRV (SDNN) — median of today's samples
         group.enter()
-        queryMostRecent(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) { val in
+        queryDailySDNN(start: today, end: tomorrow) { val in
             if let v = val { payload["hrv"] = v }
             group.leave()
         }
@@ -243,6 +243,24 @@ class HealthSyncer: ObservableObject {
                                    limit: 1, sortDescriptors: [sort]) { _, samples, _ in
             let val = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
             completion(val)
+        }
+        store.execute(query)
+    }
+
+    /// Daily SDNN = median of the day's HealthKit SDNN samples (ms), dropping
+    /// implausibly low artifact samples (< 3 ms — flatline/motion reads).
+    /// Apple emits many context-dependent SDNN samples per day; the previous
+    /// "most recent" single sample produced dropouts (values <2 ms) and stale
+    /// carries across days. Median over the day is robust to both.
+    private func queryDailySDNN(start: Date, end: Date, completion: @escaping (Double?) -> Void) {
+        let type = HKQuantityType(.heartRateVariabilitySDNN)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
+        let query = HKSampleQuery(sampleType: type, predicate: predicate,
+                                   limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+            guard let qs = samples as? [HKQuantitySample] else { completion(nil); return }
+            let ms = qs.map { $0.quantity.doubleValue(for: .secondUnit(with: .milli)) }
+                       .filter { $0 >= 3.0 }
+            completion(HealthSyncer.median(ms))
         }
         store.execute(query)
     }
@@ -522,11 +540,9 @@ class HealthSyncer: ObservableObject {
                 group.leave()
             }
 
-            // HRV (SDNN) — most recent for that day
+            // HRV (SDNN) — median of that day's samples
             group.enter()
-            queryMostRecentInRange(.heartRateVariabilitySDNN,
-                                   unit: .secondUnit(with: .milli),
-                                   start: targetDate, end: nextDay) { val in
+            queryDailySDNN(start: targetDate, end: nextDay) { val in
                 if let v = val { payload["hrv"] = v }
                 group.leave()
             }
